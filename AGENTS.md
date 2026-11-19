@@ -58,3 +58,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 # 평가 위치
 
 LLM 품질 평가(사례, 채점 스크립트, 결과 기록)는 `.claude/hillclimb/` 아래에 둔다. 현재 평가: `.claude/hillclimb/voice-conversation-loop/`(교정 정확도 AC10, 역할 유지 AC11). 사례의 정답 표는 평가받는 모델이 읽을 수 없는 곳에서만 쓴다.
+
+<!-- BEGIN add-stack-context: supabase -->
+- **Supabase** (로그인, `docs/specs/supabase-login/`): Supabase 작업을 시작하기 전에 `supabase` 스킬을 읽고(스키마·RLS를 만질 때는 `supabase-postgres-best-practices`도), `https://supabase.com/changelog.md`에서 관련 breaking change를 확인한다. 문서는 저장소에 복사하지 않고 필요할 때 `https://supabase.com/docs/...` 페이지 주소 끝에 `.md`를 붙여 가져온다. 설치된 `@supabase/ssr`, `@supabase/supabase-js` 버전과 맞춰 확인하고, 패키지는 정확한 버전으로 고정한다.
+<!-- END add-stack-context: supabase -->
