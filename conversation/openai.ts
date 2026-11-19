@@ -4,7 +4,11 @@
 export const CHAT_MODEL = "gpt-6-luna";
 export const FEEDBACK_MODEL = "gpt-6-luna";
 
-const ENDPOINT = "https://api.openai.com/v1/responses";
+// OPENAI_BASE_URL은 로컬 테스트에서 OpenAI 대신 가짜 응답 서버를 붙일 때만 쓴다.
+function endpoint(): string {
+  const base = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+  return `${base.replace(/\/+$/, "")}/responses`;
+}
 
 export class UpstreamError extends Error {}
 
@@ -36,7 +40,7 @@ export async function complete(options: {
 }): Promise<string> {
   let response: Response;
   try {
-    response = await fetch(ENDPOINT, {
+    response = await fetch(endpoint(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,

@@ -81,6 +81,17 @@ test("키가 있으면 OpenAI Responses API에 gpt-6-luna로 요청하고 답만
   expect(text).not.toContain(SECRET);
 });
 
+test("OPENAI_BASE_URL이 있으면 그 주소의 /responses로 요청한다", async () => {
+  vi.stubEnv("OPENAI_BASE_URL", "http://localhost:4010/v1/");
+  const fetchMock = vi.fn(async () => openAiReply("Hi"));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await POST(chatRequest({ personaId: "hotel-front-desk", messages: [] }));
+
+  const [url] = fetchMock.mock.calls[0] as unknown as [string];
+  expect(url).toBe("http://localhost:4010/v1/responses");
+});
+
 test("페르소나 지시문은 역할을 유지하고 대화 중 교정하지 않으라고 한다", async () => {
   const fetchMock = vi.fn(async () => openAiReply("Hi"));
   vi.stubGlobal("fetch", fetchMock);
