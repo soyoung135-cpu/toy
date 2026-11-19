@@ -23,6 +23,11 @@ function stubApi() {
       if (url === "/api/chat") {
         chatCalls.push(body);
         const next = chatReplies.shift() ?? `reply ${chatCalls.length}`;
+        if (next === "THROW") throw new TypeError("Failed to fetch");
+        if (next === "HTML") {
+          // 서버가 JSON이 아닌 본문(예: 오류 페이지)을 200으로 돌려주는 경우
+          return new Response("<html>oops</html>", { status: 200 });
+        }
         if (next === "FAIL") return Response.json({ error: "x" }, { status: 502 });
         if (next.startsWith("FAIL:")) {
           // "FAIL:<상태>:<오류 코드>" 형태로 서버가 돌려주는 실패를 흉내 낸다.
@@ -616,7 +621,7 @@ test.each(FAILURE_CASES)(
   },
 );
 
-test("알 수 없는 실패는 이유를 지어내지 않고 기본 안내만 보여 준다", async () => {
+test("알 수 없는 오류 코드는 이유를 지어내지 않고 서버 응답 코드만 알려 준다", async () => {
   chatReplies = ["FAIL:500:something_else"];
   const { user } = setup();
 
@@ -624,8 +629,32 @@ test("알 수 없는 실패는 이유를 지어내지 않고 기본 안내만 �
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
 
   const message = await screen.findByText(/응답을 받지 못했습니다/);
+  expect(message).toHaveTextContent("서버 응답 코드 500");
   expect(message).not.toHaveTextContent("OpenAI");
   expect(message).not.toHaveTextContent("로그인");
+});
+
+test("서버에 연결하지 못하면 그 사실을 알려 준다", async () => {
+  chatReplies = ["THROW"];
+  const { user } = setup();
+
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+
+  const message = await screen.findByText(/응답을 받지 못했습니다/);
+  expect(message).toHaveTextContent("서버에 연결하지 못했습니다");
+});
+
+test("서버가 JSON이 아닌 응답을 보내면 서버 응답 코드와 함께 그 사실을 알려 준다", async () => {
+  chatReplies = ["HTML"];
+  const { user } = setup();
+
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+
+  const message = await screen.findByText(/응답을 받지 못했습니다/);
+  expect(message).toHaveTextContent("알 수 없는 응답");
+  expect(message).toHaveTextContent("서버 응답 코드 200");
 });
 
 test("교정이 키 누락으로 실패하면 이유를 화면에 알려 준다", async () => {
