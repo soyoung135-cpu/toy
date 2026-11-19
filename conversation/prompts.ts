@@ -17,7 +17,7 @@ export function buildPersonaPrompt(persona: Persona, history: Message[]): string
     "- The learner's words come from speech recognition, so ignore missing punctuation or capitalization.",
   ];
   // 이번 답이 목표 턴을 채우는 답이면 마무리를 제안하게 한다. 대화는 계속될 수 있다.
-  if (countTurns(history) + 1 >= TURN_GOAL) {
+  if (countTurns(history) + 1 === TURN_GOAL) {
     lines.push(
       `- This reply completes turn ${TURN_GOAL}. Make it end with a short, natural, in-character suggestion to wrap up here (for example, that you should let them go, or that this is a good place to stop). Do not ask another question in the same reply. If the learner keeps talking afterwards, just continue the conversation normally and do not repeat the suggestion every turn.`,
     );

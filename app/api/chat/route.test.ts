@@ -127,6 +127,20 @@ test("20번째 턴의 답에서는 마무리를 제안하라고 지시하고 그
   expect(sentBody(goal).instructions).toMatch(/wrap up/i);
 });
 
+test("20턴을 넘겨 계속 말하는 동안에는 마무리 제안 지시를 다시 붙이지 않는다", async () => {
+  const fetchMock = vi.fn(async () => openAiReply("ok"));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await POST(
+    chatRequest({
+      personaId: "cafe-barista",
+      messages: [...pairs(20), { role: "user", content: "me" }],
+    }),
+  );
+
+  expect(sentBody(fetchMock).instructions).not.toMatch(/wrap up/i);
+});
+
 test("알 수 없는 페르소나나 잘못된 본문은 400이다", async () => {
   vi.stubGlobal("fetch", vi.fn());
 
