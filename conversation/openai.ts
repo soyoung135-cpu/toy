@@ -52,10 +52,21 @@ export async function complete(options: {
         store: false,
       }),
     });
-  } catch {
+  } catch (error) {
+    // 방화벽 차단이나 오프라인처럼 요청이 OpenAI에 닿지 못한 경우다.
+    console.error(
+      `[openai] request failed: ${error instanceof Error ? error.message : "unknown"}`,
+    );
     throw new UpstreamError("OpenAI request failed");
   }
   if (!response.ok) {
+    // 원인을 알 수 있게 상태와 오류 종류만 서버 로그에 남긴다. 본문에는 키 일부가 들어 있을 수 있어 남기지 않는다.
+    const body = (await response.json().catch(() => null)) as {
+      error?: { type?: unknown; code?: unknown };
+    } | null;
+    console.error(
+      `[openai] ${response.status} type=${String(body?.error?.type)} code=${String(body?.error?.code)}`,
+    );
     throw new UpstreamError(`OpenAI responded ${response.status}`);
   }
 
@@ -72,6 +83,7 @@ export async function complete(options: {
     .trim();
   if (text === "") {
     // 추론에 토큰을 다 쓰면 status가 incomplete이고 답 글자가 비어 온다.
+    console.error("[openai] response had no output text");
     throw new UpstreamError("OpenAI returned no text");
   }
   return text;
