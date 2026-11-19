@@ -54,3 +54,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 <!-- BEGIN add-stack-context: openai -->
 - **OpenAI API** (LLM 제공자, `docs/decisions/llm-models.md`): LLM 호출을 추가하거나 바꿀 때 공식 문서 색인 `https://developers.openai.com/api/docs/llms.txt`를 가져와 필요한 페이지를 읽는다(각 페이지는 URL 끝에 `.md`를 붙이면 마크다운으로 받는다). 저장소에 복사본을 두지 않는다. 모델 ID, 가격, 파라미터는 `openai-docs` 스킬과 위 문서를 따른다.
 <!-- END add-stack-context: openai -->
+
+# 평가 위치
+
+LLM 품질 평가(사례, 채점 스크립트, 결과 기록)는 `.claude/hillclimb/` 아래에 둔다. 현재 평가: `.claude/hillclimb/voice-conversation-loop/`(교정 정확도 AC10, 역할 유지 AC11). 사례의 정답 표는 평가받는 모델이 읽을 수 없는 곳에서만 쓴다.
