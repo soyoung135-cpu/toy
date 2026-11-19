@@ -9,8 +9,19 @@ const CACHE_HEADERS = ["cache-control", "expires", "pragma"];
 /**
  * 요청마다 세션을 갱신하고, 로그인하지 않은 요청을 막는다.
  * 화면은 로그인 화면으로 보내고, API는 401로 거절한다.
+ * 확인 중에 예외가 나면(예: 환경 값 URL이 잘못됨) 열어 두지 않고 503으로 막고 원인을 로그에 남긴다.
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
+  try {
+    return await handleRequest(request);
+  } catch (error) {
+    // 메시지만 남긴다. 환경 값(URL, 키)은 로그에 넣지 않는다.
+    console.error(`[auth] ${error instanceof Error ? error.message : "unknown error"}`);
+    return NextResponse.json({ error: "auth_unavailable" }, { status: 503 });
+  }
+}
+
+async function handleRequest(request: NextRequest): Promise<NextResponse> {
   if (!isAuthConfigured()) {
     // 설정이 없으면 개발 환경은 로그인 없이 쓰고, 운영 환경은 모두 막는다.
     return isProduction()

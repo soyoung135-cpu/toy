@@ -18,7 +18,9 @@ export async function requireUser(): Promise<Response | null> {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
     return null;
-  } catch {
+  } catch (error) {
+    // 확인하지 못했으면 열어 두지 않는다. 원인은 메시지만 로그에 남긴다.
+    console.error(`[auth] ${error instanceof Error ? error.message : "unknown error"}`);
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 }

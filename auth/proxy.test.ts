@@ -121,3 +121,44 @@ test("설정이 없는 운영 환경에서는 모든 요청을 막는다", async
   expect(api.status).toBe(503);
   expect(createServerClient).not.toHaveBeenCalled();
 });
+
+test("Supabase 클라이언트를 만들다 예외가 나면 500 대신 503으로 막고 원인을 로그에 남긴다", async () => {
+  createServerClient.mockImplementationOnce(() => {
+    throw new Error("Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.");
+  });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await updateSession(request("/"));
+
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: "auth_unavailable" });
+  expect(log).toHaveBeenCalledWith(expect.stringContaining("Invalid supabaseUrl"));
+  log.mockRestore();
+});
+
+test("로그인 정보를 확인하다 예외가 나도 열어 두지 않고 503으로 막는다", async () => {
+  getClaims.mockRejectedValue(new Error("fetch failed"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const page = await updateSession(request("/"));
+  const api = await updateSession(request("/api/chat"));
+
+  expect(page.status).toBe(503);
+  expect(api.status).toBe(503);
+  expect(log).toHaveBeenCalledWith(expect.stringContaining("fetch failed"));
+  log.mockRestore();
+});
+
+test("로그에는 환경 값 자체를 남기지 않는다", async () => {
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "sb_publishable_SECRETVALUE");
+  createServerClient.mockImplementationOnce(() => {
+    throw new Error("boom");
+  });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await updateSession(request("/"));
+
+  const logged = log.mock.calls.flat().join(" ");
+  expect(logged).not.toContain("SECRETVALUE");
+  log.mockRestore();
+});
