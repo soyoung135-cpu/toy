@@ -1,0 +1,5 @@
+trials/
+errors/
+judge-input-*.json
+judge-output-*.json
+*-scored-stage1.json

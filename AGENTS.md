@@ -44,3 +44,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 자동 코드 리뷰는 최대 1회, 가장 낮은 강도(`code-review low`)로만 돌린다. 리뷰어를 못 부르면 그 사실만 적고 완료로 본다.
 - 지적 중 스펙의 수용 기준을 깨거나 주 경로가 실제로 깨지는 것만 고친다. 나머지는 `docs/follow-ups/`에 한 줄로 남긴다. 재리뷰는 하지 않는다.
 - 스펙이 요구하지 않은 보안 하드닝·엣지케이스·성능 방어는 범위 밖이다.
+
+# 기술 스택 최신 문서
+
+<!-- BEGIN add-stack-context: vercel -->
+- **Vercel** (호스팅): 배포·환경 변수·요금제 제한과 관련된 작업을 시작할 때 공식 문서 색인 `https://vercel.com/llms.txt`를 가져와 필요한 페이지를 읽는다. 저장소에 복사본을 두지 않으며, 내용은 프로젝트의 `next` 버전과 Vercel 프로젝트 설정에 맞춰 확인한다. 배포 절차 자체는 `deploy-to-vercel` 스킬을 따른다.
+<!-- END add-stack-context: vercel -->
+
+<!-- BEGIN add-stack-context: openai -->
+- **OpenAI API** (LLM 제공자, `docs/decisions/llm-models.md`): LLM 호출을 추가하거나 바꿀 때 공식 문서 색인 `https://developers.openai.com/api/docs/llms.txt`를 가져와 필요한 페이지를 읽는다(각 페이지는 URL 끝에 `.md`를 붙이면 마크다운으로 받는다). 저장소에 복사본을 두지 않는다. 모델 ID, 가격, 파라미터는 `openai-docs` 스킬과 위 문서를 따른다.
+<!-- END add-stack-context: openai -->
+
+# 평가 위치
+
+LLM 품질 평가(사례, 채점 스크립트, 결과 기록)는 `.claude/hillclimb/` 아래에 둔다. 현재 평가: `.claude/hillclimb/voice-conversation-loop/`(교정 정확도 AC10, 역할 유지 AC11). 사례의 정답 표는 평가받는 모델이 읽을 수 없는 곳에서만 쓴다.
+
+<!-- BEGIN add-stack-context: supabase -->
+- **Supabase** (로그인, `docs/specs/supabase-login/`): Supabase 작업을 시작하기 전에 `supabase` 스킬을 읽고(스키마·RLS를 만질 때는 `supabase-postgres-best-practices`도), `https://supabase.com/changelog.md`에서 관련 breaking change를 확인한다. 문서는 저장소에 복사하지 않고 필요할 때 `https://supabase.com/docs/...` 페이지 주소 끝에 `.md`를 붙여 가져온다. 설치된 `@supabase/ssr`, `@supabase/supabase-js` 버전과 맞춰 확인하고, 패키지는 정확한 버전으로 고정한다.
+<!-- END add-stack-context: supabase -->
