@@ -63,14 +63,10 @@ function stubApi() {
   );
 }
 
-function fakeSpeech(lines: (string | Error)[] = []) {
-  const queue = [...lines];
+// 화면은 더 이상 listen을 부르지 않는다. 불리면 실패로 잡으려고 호출 기록만 남긴다.
+function fakeSpeech() {
   const speech = {
-    listen: vi.fn(async () => {
-      const next = queue.shift() ?? "I like it";
-      if (next instanceof Error) throw next;
-      return next;
-    }),
+    listen: vi.fn(async () => "unused"),
     speak: vi.fn(async () => {}),
   };
   return speech satisfies SpeechPort;
@@ -94,16 +90,16 @@ function setup(speech = fakeSpeech(), random: () => number = () => 0) {
 }
 
 async function startConversation(user: ReturnType<typeof createUser>) {
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
   await screen.findByText("reply 1");
 }
 
-async function say(user: ReturnType<typeof createUser>) {
-  const button = screen.getByRole("button", { name: "말하기" });
-  // 페르소나가 말하는 동안에는 눌러도 반응하지 않으므로 켜질 때까지 기다린다.
-  await waitFor(() => expect(button).toBeEnabled());
-  await user.click(button);
+// 영어 문장을 입력창에 쳐서 보낸다.
+async function say(text = "I like it") {
+  // 페르소나가 말하는 동안에는 입력창이 막혀 있으므로 풀릴 때까지 기다린다.
+  await waitFor(() => expect(textBox()).toBeEnabled());
+  await typeText(text);
+  await submitForm();
 }
 
 beforeEach(() => {
@@ -121,34 +117,35 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("새 대화를 누르면 페르소나의 역할, 이름, 상황이 보인다", async () => {
-  const { user } = setup();
-
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
+test("처음 화면에 페르소나의 한국어 역할과 상황, 이름이 보이고 대화 시작과 새 대화 버튼이 함께 있다", () => {
+  setup();
 
   expect(screen.getByText("Emma")).toBeInTheDocument();
-  expect(screen.getByText("Hotel front desk clerk")).toBeInTheDocument();
-  expect(screen.getByText(/can't find your reservation/)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "대화 시작" })).toBeInTheDocument();
+  expect(screen.getByText("호텔 프런트 직원")).toBeInTheDocument();
+  expect(
+    screen.getByText("출장으로 호텔에 도착했는데 직원이 예약을 찾지 못합니다."),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/Hotel front desk clerk/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "대화 시작" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "새 대화" })).toBeInTheDocument();
 });
 
-test("새 대화를 다시 누르면 무작위 값에 따라 다른 페르소나가 뜬다", async () => {
+test("새 대화를 누르면 무작위 값에 따라 다른 페르소나가 뜬다", async () => {
   const values = [0, 0.999];
   const { user } = setup(fakeSpeech(), () => values.shift() ?? 0);
-
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   expect(screen.getByText("Emma")).toBeInTheDocument();
+
   await user.click(screen.getByRole("button", { name: "새 대화" }));
 
   expect(screen.queryByText("Emma")).not.toBeInTheDocument();
   expect(screen.getByText("Sarah")).toBeInTheDocument();
+  expect(screen.getByText("면접관")).toBeInTheDocument();
 });
 
 test("대화를 시작하면 페르소나의 첫 영어 발화가 글자로 보이고 소리로 재생된다", async () => {
   chatReplies = ["Hello, I'm Emma."];
   const { user, speech } = setup();
 
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
 
   expect(await screen.findByText("Hello, I'm Emma.")).toBeInTheDocument();
@@ -157,14 +154,24 @@ test("대화를 시작하면 페르소나의 첫 영어 발화가 글자로 보�
   expect(screen.getByText("0/20")).toBeInTheDocument();
 });
 
-test("내가 말하면 받아 적은 문장과 페르소나의 답이 글자와 소리로 나오고 턴이 1 늘어난다", async () => {
+test("대화 화면에는 말하기 버튼이 없고 입력창으로만 말한다", async () => {
+  const { user, speech } = setup();
+
+  await startConversation(user);
+
+  expect(screen.queryByRole("button", { name: "말하기" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("영어 문장 입력")).toBeInTheDocument();
+  expect(screen.getByText("호텔 프런트 직원")).toBeInTheDocument();
+  expect(speech.listen).not.toHaveBeenCalled();
+});
+
+test("내가 문장을 보내면 그 문장과 페르소나의 답이 글자와 소리로 나오고 턴이 1 늘어난다", async () => {
   chatReplies = ["Hello!", "Sure, what's your name?"];
-  const { user, speech } = setup(fakeSpeech(["I have a reservation"]));
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  const { user, speech } = setup();
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
   await screen.findByText("Hello!");
 
-  await say(user);
+  await say("I have a reservation");
 
   expect(await screen.findByText("I have a reservation")).toBeInTheDocument();
   expect(await screen.findByText("Sure, what's your name?")).toBeInTheDocument();
@@ -181,26 +188,26 @@ test("20턴이 되면 목표 달성이 표시되고, 더 말하면 21턴으로 �
   await startConversation(user);
 
   for (let turn = 1; turn <= 19; turn++) {
-    await say(user);
+    await say();
     await screen.findByText(`${turn}/20`);
   }
   expect(screen.queryByText(/목표 달성/)).not.toBeInTheDocument();
 
-  await say(user);
+  await say();
   expect(await screen.findByText("20턴 · 목표 달성")).toBeInTheDocument();
 
-  await say(user);
+  await say();
   expect(await screen.findByText("21턴 · 목표 달성")).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: /교정/ })).not.toBeInTheDocument();
 });
 
 test.each(["Let's stop here", "I'm done", "Let's finish"])(
-  "영어 종료 문구 %s 를 말하면 대화가 끝나고 교정 화면으로 간다",
+  "영어 종료 문구 %s 를 보내면 대화가 끝나고 교정 화면으로 간다",
   async (phrase) => {
-    const { user } = setup(fakeSpeech([phrase]));
+    const { user } = setup();
     await startConversation(user);
 
-    await say(user);
+    await say(phrase);
 
     expect(await screen.findByRole("heading", { name: "교정" })).toBeInTheDocument();
     expect(feedbackCalls).toHaveLength(1);
@@ -218,12 +225,10 @@ test("종료 버튼을 눌러도 교정 화면으로 간다", async () => {
 });
 
 test("종료 문구가 아닌 일반 문장은 대화를 끝내지 않는다", async () => {
-  const { user } = setup(
-    fakeSpeech(["I'm done with my homework already, and you?"]),
-  );
+  const { user } = setup();
   await startConversation(user);
 
-  await say(user);
+  await say("I'm done with my homework already, and you?");
 
   expect(await screen.findByText("1/20")).toBeInTheDocument();
   expect(feedbackCalls).toHaveLength(0);
@@ -232,10 +237,10 @@ test("종료 문구가 아닌 일반 문장은 대화를 끝내지 않는다", a
 
 test("대화 중에는 교정이나 교정 요청이 나타나지 않는다", async () => {
   corrections = [{ original: "a", corrected: "b", explanation: "c" }];
-  const { user } = setup(fakeSpeech(["I go to office yesterday"]));
+  const { user } = setup();
   await startConversation(user);
 
-  await say(user);
+  await say("I go to office yesterday");
   await screen.findByText("1/20");
 
   expect(feedbackCalls).toHaveLength(0);
@@ -250,9 +255,9 @@ test("교정 화면에는 고칠 문장마다 원래 문장, 고친 문장, 한�
       explanation: "yesterday가 있으므로 과거형 went를 씁니다.",
     },
   ];
-  const { user } = setup(fakeSpeech(["I go to office yesterday"]));
+  const { user } = setup();
   await startConversation(user);
-  await say(user);
+  await say("I go to office yesterday");
   await screen.findByText("1/20");
 
   await user.click(screen.getByRole("button", { name: "종료" }));
@@ -280,7 +285,7 @@ test("고칠 것이 없으면 없다고 표시한다", async () => {
   expect(await screen.findByText("고칠 문장이 없습니다")).toBeInTheDocument();
 });
 
-test("교정 화면에서 새 대화를 시작하면 페르소나 선택 상태로 돌아간다", async () => {
+test("교정 화면에서 새 대화를 누르면 페르소나와 대화 시작 버튼이 있는 첫 화면으로 돌아간다", async () => {
   const { user } = setup();
   await startConversation(user);
   await user.click(screen.getByRole("button", { name: "종료" }));
@@ -291,23 +296,6 @@ test("교정 화면에서 새 대화를 시작하면 페르소나 선택 상태�
   expect(screen.getByRole("button", { name: "대화 시작" })).toBeInTheDocument();
   expect(screen.getByText("Emma")).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "교정" })).not.toBeInTheDocument();
-});
-
-test("말하기 버튼을 같은 순간에 두 번 눌러도 듣기는 한 번만 시작된다", async () => {
-  const { user, speech } = setup(fakeSpeech(["First", "Second"]));
-  await startConversation(user);
-  const button = screen.getByRole("button", { name: "말하기" });
-  await waitFor(() => expect(button).toBeEnabled());
-
-  await act(async () => {
-    button.click();
-    button.click();
-  });
-
-  await screen.findByText("1/20");
-  expect(speech.listen).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("First")).toBeInTheDocument();
-  expect(chatCalls).toHaveLength(2);
 });
 
 test("종료 버튼을 같은 순간에 두 번 눌러도 교정 요청은 한 번만 나간다", async () => {
@@ -324,25 +312,13 @@ test("종료 버튼을 같은 순간에 두 번 눌러도 교정 요청은 한 �
   expect(feedbackCalls).toHaveLength(1);
 });
 
-test("말소리가 인식되지 않으면 안내가 보이고 턴은 늘지 않는다", async () => {
-  const { user } = setup(fakeSpeech([new Error("no-speech")]));
-  await startConversation(user);
-
-  await say(user);
-
-  expect(await screen.findByText(/말소리가 들리지 않았습니다/)).toBeInTheDocument();
-  expect(screen.getByText("0/20")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "말하기" })).toBeEnabled();
-});
-
 test("페르소나의 답을 받지 못하면 안내가 보이고 내 말은 기록에서 빠진다", async () => {
   chatReplies = ["Hello!", "FAIL"];
-  const { user } = setup(fakeSpeech(["I will fail"]));
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  const { user } = setup();
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
   await screen.findByText("Hello!");
 
-  await say(user);
+  await say("I will fail");
 
   expect(await screen.findByText(/응답을 받지 못했습니다/)).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByText("I will fail")).not.toBeInTheDocument());
@@ -370,7 +346,6 @@ async function submitForm() {
 test("입력창에 쓴 문장을 보내면 말한 것과 똑같이 처리되고 입력창이 비워지며 음성 인식은 시작되지 않는다", async () => {
   chatReplies = ["Hello!", "Nice to meet you, Kim."];
   const { user, speech } = setup();
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
   await screen.findByText("Hello!");
   await waitFor(() => expect(textBox()).toBeEnabled());
@@ -430,7 +405,6 @@ test("입력창에 종료 문구를 써서 보내면 교정 화면으로 간다"
 test("페르소나의 답을 기다리는 동안에는 입력창과 보내기가 막힌다", async () => {
   chatReplies = ["Hello!", "HOLD"];
   const { user } = setup();
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
   await screen.findByText("Hello!");
   await waitFor(() => expect(textBox()).toBeEnabled());
@@ -468,7 +442,6 @@ test("같은 순간에 두 번 보내도 한 번만 처리된다", async () => {
 test("답을 받지 못하면 입력했던 문장이 입력창에 돌아온다", async () => {
   chatReplies = ["Hello!", "FAIL"];
   const { user } = setup();
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
   await screen.findByText("Hello!");
   await waitFor(() => expect(textBox()).toBeEnabled());
@@ -500,7 +473,6 @@ test("저장된 설정이 소리 끄기면 첫 인사도 소리 없이 글자로
   chatReplies = ["Hello, quietly."];
   const { user, speech } = setup();
 
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
 
   expect(await screen.findByText("Hello, quietly.")).toBeInTheDocument();
@@ -513,7 +485,6 @@ test("저장된 설정이 소리 끄기면 첫 인사도 소리 없이 글자로
 test("대화 중에 소리 끄기를 켜면 다음 답은 글자로만 나오고, 끄면 다시 소리가 난다", async () => {
   chatReplies = ["Hello!", "Quiet reply.", "Loud reply."];
   const { user, speech } = setup();
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
   await screen.findByText("Hello!");
   await waitFor(() => expect(textBox()).toBeEnabled());
@@ -538,7 +509,6 @@ test("페르소나가 말하는 중에 소리 끄기를 켜면 재생이 멈추�
   const stop = vi.fn();
   (speech as SpeechPort).stop = stop;
   speech.speak = vi.fn(() => new Promise<void>(() => {})); // 끝나지 않는 재생
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
   await screen.findByText("reply 1");
   await waitFor(() => expect(screen.getByText("말하는 중...")).toBeInTheDocument());
@@ -565,7 +535,6 @@ test("소리 끄기 설정은 새 대화로 넘어가도 새로고침해도 유�
 
   cleanup(); // 새로고침처럼 화면을 새로 만든다
   const second = setup();
-  await second.user.click(screen.getByRole("button", { name: "새 대화" }));
   await second.user.click(screen.getByRole("button", { name: "대화 시작" }));
   await screen.findByText(/reply/);
   expect(muteSwitch()).toHaveAttribute("aria-checked", "true");
@@ -603,7 +572,6 @@ test.each(FAILURE_CASES)(
     chatReplies = [reply];
     const { user } = setup();
 
-    await user.click(screen.getByRole("button", { name: "새 대화" }));
     await user.click(screen.getByRole("button", { name: "대화 시작" }));
 
     const message = await screen.findByText(/응답을 받지 못했습니다/);
@@ -616,7 +584,6 @@ test.each(FAILURE_CASES)(
   async (reply, reason) => {
     chatReplies = ["Hello!", reply];
     const { user } = setup();
-    await user.click(screen.getByRole("button", { name: "새 대화" }));
     await user.click(screen.getByRole("button", { name: "대화 시작" }));
     await screen.findByText("Hello!");
     await waitFor(() => expect(textBox()).toBeEnabled());
@@ -633,7 +600,6 @@ test("알 수 없는 오류 코드는 이유를 지어내지 않고 서버 응�
   chatReplies = ["FAIL:500:something_else"];
   const { user } = setup();
 
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
 
   const message = await screen.findByText(/응답을 받지 못했습니다/);
@@ -646,7 +612,6 @@ test("서버에 연결하지 못하면 그 사실을 알려 준다", async () =>
   chatReplies = ["THROW"];
   const { user } = setup();
 
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
 
   const message = await screen.findByText(/응답을 받지 못했습니다/);
@@ -657,7 +622,6 @@ test("서버가 JSON이 아닌 응답을 보내면 서버 응답 코드와 함�
   chatReplies = ["HTML"];
   const { user } = setup();
 
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
 
   const message = await screen.findByText(/응답을 받지 못했습니다/);
@@ -693,7 +657,6 @@ test.each(UPSTREAM_CASES)(
   async (reply, expected) => {
     chatReplies = ["Hello!", reply];
     const { user } = setup();
-    await user.click(screen.getByRole("button", { name: "새 대화" }));
     await user.click(screen.getByRole("button", { name: "대화 시작" }));
     await screen.findByText("Hello!");
     await waitFor(() => expect(textBox()).toBeEnabled());
@@ -710,7 +673,6 @@ test("OpenAI 실패에 담긴 정보가 없으면 서버 로그를 보라고만 
   chatReplies = ["FAIL:502:upstream_failed"];
   const { user } = setup();
 
-  await user.click(screen.getByRole("button", { name: "새 대화" }));
   await user.click(screen.getByRole("button", { name: "대화 시작" }));
 
   const message = await screen.findByText(/응답을 받지 못했습니다/);

@@ -5,6 +5,8 @@ export const PERSONAS: Persona[] = [
     id: "hotel-front-desk",
     role: "Hotel front desk clerk",
     name: "Emma",
+    roleKo: "호텔 프런트 직원",
+    situationKo: "출장으로 호텔에 도착했는데 직원이 예약을 찾지 못합니다.",
     situation:
       "You arrive at a hotel on a business trip, but the clerk can't find your reservation.",
     personality:
@@ -14,6 +16,8 @@ export const PERSONAS: Persona[] = [
     id: "cafe-barista",
     role: "Cafe barista",
     name: "Jake",
+    roleKo: "카페 바리스타",
+    situationKo: "붐비는 카페에서 음료와 빵을 주문하며 사이즈와 우유 옵션을 물어봅니다.",
     situation:
       "You order a drink at a busy cafe and need to ask about sizes, milk options and a pastry.",
     personality:
@@ -23,6 +27,8 @@ export const PERSONAS: Persona[] = [
     id: "coworker-small-talk",
     role: "Coworker from another team",
     name: "Priya",
+    roleKo: "다른 팀 동료",
+    situationKo: "회의 전 엘리베이터에서 동료를 만나 2분 정도 가벼운 대화를 나눕니다.",
     situation:
       "You meet a coworker in the elevator and have two minutes of small talk before a meeting.",
     personality:
@@ -32,6 +38,8 @@ export const PERSONAS: Persona[] = [
     id: "clinic-receptionist",
     role: "Clinic receptionist",
     name: "Daniel",
+    roleKo: "병원 접수 직원",
+    situationKo: "심한 감기로 병원에 와서 접수하고 증상과 대기 시간을 이야기합니다.",
     situation:
       "You visit a clinic with a bad cold and need to register, describe your symptoms and ask about waiting time.",
     personality:
@@ -41,6 +49,8 @@ export const PERSONAS: Persona[] = [
     id: "job-interviewer",
     role: "Job interviewer",
     name: "Sarah",
+    roleKo: "면접관",
+    situationKo: "해외 기업 면접에서 면접관 Sarah가 경력에 대해 묻습니다.",
     situation:
       "You are in a job interview for a role at an international company, and Sarah asks about your experience.",
     personality:

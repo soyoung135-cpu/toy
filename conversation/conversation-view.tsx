@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -30,11 +30,16 @@ export interface ConversationViewProps {
   random?: () => number;
 }
 
-type Phase = "idle" | "persona" | "chatting" | "feedback";
+type Phase = "persona" | "chatting" | "feedback";
 type Status = "ready" | "listening" | "thinking" | "speaking";
 
+// 지금은 글자 입력으로 쓰려고 마이크 버튼을 화면에서 숨긴다. true로 바꾸면 버튼이 다시 보인다.
+const SHOW_MIC_BUTTON = false;
+
 const STATUS_LABEL: Record<Status, string> = {
-  ready: "말하기 버튼을 누르고 영어로 말해 보세요.",
+  ready: SHOW_MIC_BUTTON
+    ? "말하기 버튼을 누르고 영어로 말해 보세요."
+    : "영어 문장을 입력하고 Enter를 눌러 보내세요.",
   listening: "듣는 중...",
   thinking: "생각하는 중...",
   speaking: "말하는 중...",
@@ -48,6 +53,11 @@ function listenErrorMessage(error: unknown): string {
   if (code === "not-allowed" || code === "service-not-allowed")
     return "마이크 사용이 허용되지 않았습니다. 브라우저 설정에서 마이크를 허용해 주세요.";
   return "음성을 인식하지 못했습니다. 다시 눌러 주세요.";
+}
+
+// 구독할 외부 값이 없다. 서버와 브라우저 화면을 구분하는 데만 쓴다.
+function subscribeNothing() {
+  return () => {};
 }
 
 const MUTE_STORAGE_KEY = "conversation:sound-muted";
@@ -65,8 +75,17 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
   const [speechPort] = useState<SpeechPort>(() => speech ?? createBrowserSpeech());
   const rand = random ?? Math.random;
 
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [persona, setPersona] = useState<Persona | null>(null);
+  const [phase, setPhase] = useState<Phase>("persona");
+  // 첫 화면부터 페르소나가 떠 있게 한다. 서버가 그린 화면과 어긋나지 않도록 서버 쪽은 비워 두고
+  // 브라우저에서만 처음 고른 페르소나를 보여 준다. 새 대화로 다시 고르면 chosen이 이를 덮는다.
+  const [firstPick] = useState(() => pickPersona(rand));
+  const initialPersona = useSyncExternalStore(
+    subscribeNothing,
+    () => firstPick,
+    () => null,
+  );
+  const [chosen, setChosen] = useState<Persona | null>(null);
+  const persona = chosen ?? initialPersona;
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>("ready");
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +113,7 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
     runId.current++;
     ending.current = false;
     speechPort.stop?.();
-    setPersona(pickPersona(rand));
+    setChosen(pickPersona(rand));
     setMessages([]);
     setCorrections(null);
     setDraft("");
@@ -235,36 +254,18 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
     }
   }
 
-  if (phase === "idle") {
+  if (phase === "persona") {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>영어 회화 연습</CardTitle>
-          <CardDescription>
-            상황에 맞는 상대와 영어로 소리 내어 말해 보세요.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <Button size="lg" onClick={chooseNewPersona}>
-            새 대화
-          </Button>
-        </CardFooter>
-      </Card>
-    );
-  }
-
-  if (phase === "persona" && persona) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardDescription>{persona.role}</CardDescription>
-          <CardTitle>{persona.name}</CardTitle>
+          <CardDescription>{persona?.roleKo ?? "영어 회화 연습"}</CardDescription>
+          <CardTitle>{persona?.name ?? "대화 상대를 고르는 중..."}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">{persona.situation}</p>
+          <p className="text-muted-foreground">{persona?.situationKo ?? ""}</p>
         </CardContent>
         <CardFooter className="gap-2">
-          <Button size="lg" onClick={startConversation}>
+          <Button size="lg" onClick={startConversation} disabled={!persona}>
             대화 시작
           </Button>
           <Button size="lg" variant="outline" onClick={chooseNewPersona}>
@@ -282,7 +283,7 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
           <div className="flex items-baseline justify-between gap-2">
             <p className="font-medium">
               {persona.name}
-              <span className="ml-2 text-sm text-muted-foreground">{persona.role}</span>
+              <span className="ml-2 text-sm text-muted-foreground">{persona.roleKo}</span>
             </p>
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -335,7 +336,7 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
         >
           <Input
             aria-label="영어 문장 입력"
-            placeholder="마이크 대신 영어로 입력하고 Enter"
+            placeholder="영어로 입력하고 Enter"
             autoComplete="off"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -350,10 +351,12 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
           </Button>
         </form>
         <div className="flex gap-2">
-          <Button size="lg" className="flex-1" onClick={speak} disabled={status !== "ready"}>
-            말하기
-          </Button>
-          <Button size="lg" variant="outline" onClick={finish}>
+          {SHOW_MIC_BUTTON && (
+            <Button size="lg" className="flex-1" onClick={speak} disabled={status !== "ready"}>
+              말하기
+            </Button>
+          )}
+          <Button size="lg" variant="outline" className="flex-1" onClick={finish}>
             종료
           </Button>
         </div>

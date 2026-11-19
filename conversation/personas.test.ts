@@ -11,6 +11,14 @@ test("미리 저장된 페르소나는 5개이고 각각 역할, 이름, 상황�
   }
 });
 
+test("화면에 보이는 역할과 상황은 한국어로 적혀 있다", () => {
+  const hangul = /[가-힣]/;
+  for (const persona of PERSONAS) {
+    expect(persona.roleKo).toMatch(hangul);
+    expect(persona.situationKo).toMatch(hangul);
+  }
+});
+
 test("무작위 값이 다르면 서로 다른 페르소나가 골라진다", () => {
   const first = pickPersona(() => 0);
   const last = pickPersona(() => 0.999999);
