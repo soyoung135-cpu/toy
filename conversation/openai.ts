@@ -10,7 +10,24 @@ function endpoint(): string {
   return `${base.replace(/\/+$/, "")}/responses`;
 }
 
-export class UpstreamError extends Error {}
+/**
+ * OpenAI 호출이 실패했다는 오류. status와 code는 화면에 보여 주려고 담는다.
+ * OpenAI의 오류 문장(message)은 키 일부가 들어 있을 수 있어 담지 않는다.
+ */
+export class UpstreamError extends Error {
+  constructor(
+    message: string,
+    readonly status: number = 0,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
+// 오류 종류는 짧은 식별자 모양일 때만 받는다(예: invalid_api_key).
+function safeCode(value: unknown): string | undefined {
+  return typeof value === "string" && /^[a-z0-9_.-]{1,64}$/i.test(value) ? value : undefined;
+}
 
 export function hasApiKey(): boolean {
   return Boolean(process.env.OPENAI_API_KEY);
@@ -61,7 +78,7 @@ export async function complete(options: {
     console.error(
       `[openai] request failed: ${error instanceof Error ? error.message : "unknown"}`,
     );
-    throw new UpstreamError("OpenAI request failed");
+    throw new UpstreamError("OpenAI request failed", 0, "network_error");
   }
   if (!response.ok) {
     // 원인을 알 수 있게 상태와 오류 종류만 서버 로그에 남긴다. 본문에는 키 일부가 들어 있을 수 있어 남기지 않는다.
@@ -71,7 +88,11 @@ export async function complete(options: {
     console.error(
       `[openai] ${response.status} type=${String(body?.error?.type)} code=${String(body?.error?.code)}`,
     );
-    throw new UpstreamError(`OpenAI responded ${response.status}`);
+    throw new UpstreamError(
+      `OpenAI responded ${response.status}`,
+      response.status,
+      safeCode(body?.error?.code) ?? safeCode(body?.error?.type),
+    );
   }
 
   const data = (await response.json().catch(() => null)) as {
@@ -88,7 +109,7 @@ export async function complete(options: {
   if (text === "") {
     // 추론에 토큰을 다 쓰면 status가 incomplete이고 답 글자가 비어 온다.
     console.error("[openai] response had no output text");
-    throw new UpstreamError("OpenAI returned no text");
+    throw new UpstreamError("OpenAI returned no text", response.status, "empty_output");
   }
   return text;
 }

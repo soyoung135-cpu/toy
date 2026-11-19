@@ -24,6 +24,14 @@ function stubApi() {
         chatCalls.push(body);
         const next = chatReplies.shift() ?? `reply ${chatCalls.length}`;
         if (next === "THROW") throw new TypeError("Failed to fetch");
+        if (next.startsWith("UP:")) {
+          // "UP:<OpenAI 상태>:<오류 코드>" — OpenAI 호출이 실패했을 때 서버가 담아 주는 정보를 흉내 낸다.
+          const [, status, code] = next.split(":");
+          return Response.json(
+            { error: "upstream_failed", upstream: { status: Number(status), code } },
+            { status: 502 },
+          );
+        }
         if (next === "HTML") {
           // 서버가 JSON이 아닌 본문(예: 오류 페이지)을 200으로 돌려주는 경우
           return new Response("<html>oops</html>", { status: 200 });
@@ -666,4 +674,46 @@ test("교정이 키 누락으로 실패하면 이유를 화면에 알려 준다"
 
   const message = await screen.findByText(/교정을 불러오지 못했습니다/);
   expect(message).toHaveTextContent("OpenAI 키");
+});
+
+// ---- OpenAI 실패 이유 (상태 코드와 오류 종류) ----
+
+const UPSTREAM_CASES: [string, string[]][] = [
+  ["UP:401:invalid_api_key", ["OpenAI 응답 401", "invalid_api_key", "키가 올바른지"]],
+  ["UP:404:model_not_found", ["OpenAI 응답 404", "model_not_found", "gpt-6-luna"]],
+  ["UP:429:insufficient_quota", ["OpenAI 응답 429", "insufficient_quota", "크레딧"]],
+  ["UP:429:rate_limit_exceeded", ["OpenAI 응답 429", "rate_limit_exceeded", "잠시 후"]],
+  ["UP:0:network_error", ["서버에서 OpenAI에 연결하지 못했습니다"]],
+  ["UP:200:empty_output", ["글자 답을 내지 못했습니다"]],
+  ["UP:200:invalid_output", ["형식에 맞지 않는 교정"]],
+];
+
+test.each(UPSTREAM_CASES)(
+  "OpenAI 호출이 %s 로 실패하면 상태와 오류 종류, 대처를 화면에 알려 준다",
+  async (reply, expected) => {
+    chatReplies = ["Hello!", reply];
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "새 대화" }));
+    await user.click(screen.getByRole("button", { name: "대화 시작" }));
+    await screen.findByText("Hello!");
+    await waitFor(() => expect(textBox()).toBeEnabled());
+
+    await typeText("Hi");
+    await submitForm();
+
+    const message = await screen.findByText(/응답을 받지 못했습니다/);
+    for (const text of expected) expect(message).toHaveTextContent(text);
+  },
+);
+
+test("OpenAI 실패에 담긴 정보가 없으면 서버 로그를 보라고만 안내한다", async () => {
+  chatReplies = ["FAIL:502:upstream_failed"];
+  const { user } = setup();
+
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+
+  const message = await screen.findByText(/응답을 받지 못했습니다/);
+  expect(message).toHaveTextContent("[openai]");
+  expect(message).not.toHaveTextContent("OpenAI 응답");
 });

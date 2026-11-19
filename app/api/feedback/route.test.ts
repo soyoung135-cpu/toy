@@ -168,3 +168,26 @@ test("키가 없어 막을 때 서버 로그에 이유를 남긴다(키 값은 �
   expect(log).toHaveBeenCalledWith(expect.stringContaining("OPENAI_API_KEY"));
   log.mockRestore();
 });
+
+test("OpenAI가 429 insufficient_quota로 거절하면 상태와 코드를 502 응답에 담는다", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json(
+        { error: { message: "You exceeded your current quota", type: "insufficient_quota", code: "insufficient_quota" } },
+        { status: 429 },
+      ),
+    ),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await POST(feedbackRequest({ messages }));
+  const body = await response.json();
+
+  expect(response.status).toBe(502);
+  expect(body).toEqual({
+    error: "upstream_failed",
+    upstream: { status: 429, code: "insufficient_quota" },
+  });
+  log.mockRestore();
+});

@@ -25,8 +25,15 @@ function unavailable() {
   return Response.json({ error: "llm_not_configured" }, { status: 503 });
 }
 
-function upstreamFailed() {
-  return Response.json({ error: "upstream_failed" }, { status: 502 });
+// OpenAI가 돌려준 상태와 오류 종류만 화면에 알리려고 담는다. 오류 문장과 키는 담지 않는다.
+function upstreamFailed(failure?: { status: number; code?: string }) {
+  return Response.json(
+    {
+      error: "upstream_failed",
+      ...(failure ? { upstream: { status: failure.status, code: failure.code } } : {}),
+    },
+    { status: 502 },
+  );
 }
 
 async function readJson(request: Request): Promise<unknown> {
@@ -83,7 +90,7 @@ export async function handleChat(request: Request): Promise<Response> {
     });
     return Response.json({ reply });
   } catch (error) {
-    if (error instanceof UpstreamError) return upstreamFailed();
+    if (error instanceof UpstreamError) return upstreamFailed(error);
     throw error;
   }
 }
@@ -146,10 +153,10 @@ export async function handleFeedback(request: Request): Promise<Response> {
       input: [{ role: "user", content: formatTranscript(messages) }],
     });
     const corrections = parseCorrections(text);
-    if (!corrections) return upstreamFailed();
+    if (!corrections) return upstreamFailed({ status: 200, code: "invalid_output" });
     return Response.json({ corrections });
   } catch (error) {
-    if (error instanceof UpstreamError) return upstreamFailed();
+    if (error instanceof UpstreamError) return upstreamFailed(error);
     throw error;
   }
 }

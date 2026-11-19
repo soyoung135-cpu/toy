@@ -264,3 +264,75 @@ test("키가 없어 막을 때 서버 로그에 이유를 남긴다(키 값은 �
   expect(log).toHaveBeenCalledWith(expect.stringContaining("OPENAI_API_KEY"));
   log.mockRestore();
 });
+
+test("OpenAI가 401 invalid_api_key로 거절하면 상태와 코드만 502 응답에 담고 오류 문장과 키는 담지 않는다", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json(
+        {
+          error: {
+            message: `Incorrect API key provided: ${SECRET}`,
+            type: "invalid_request_error",
+            code: "invalid_api_key",
+          },
+        },
+        { status: 401 },
+      ),
+    ),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await POST(
+    chatRequest({ personaId: "hotel-front-desk", messages: [] }),
+  );
+  const text = await response.text();
+
+  expect(response.status).toBe(502);
+  expect(JSON.parse(text)).toEqual({
+    error: "upstream_failed",
+    upstream: { status: 401, code: "invalid_api_key" },
+  });
+  expect(text).not.toContain(SECRET);
+  expect(text).not.toContain("Incorrect API key");
+  log.mockRestore();
+});
+
+test("OpenAI에 연결하지 못하면 network_error 코드를 담는다", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    }),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await POST(
+    chatRequest({ personaId: "hotel-front-desk", messages: [] }),
+  );
+
+  expect(response.status).toBe(502);
+  expect((await response.json()).upstream).toEqual({ status: 0, code: "network_error" });
+  log.mockRestore();
+});
+
+test("답 글자가 비어 오면 empty_output 코드를 담는다", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ status: "incomplete", output: [{ type: "reasoning", id: "rs_1" }] }),
+          { status: 200 },
+        ),
+    ),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const response = await POST(
+    chatRequest({ personaId: "hotel-front-desk", messages: [] }),
+  );
+
+  expect((await response.json()).upstream).toEqual({ status: 200, code: "empty_output" });
+  log.mockRestore();
+});
