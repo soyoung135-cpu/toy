@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { ConversationView } from "./conversation-view";
@@ -83,6 +83,7 @@ async function say(user: ReturnType<typeof createUser>) {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
   releaseHold = null;
   chatCalls = [];
   feedbackCalls = [];
@@ -453,4 +454,112 @@ test("답을 받지 못하면 입력했던 문장이 입력창에 돌아온다",
   expect(await screen.findByText(/응답을 받지 못했습니다/)).toBeInTheDocument();
   await waitFor(() => expect(textBox().value).toBe("This will fail"));
   expect(screen.getByText("0/20")).toBeInTheDocument();
+});
+
+// ---- 소리 끄기 (AC13) ----
+
+const MUTE_KEY = "conversation:sound-muted";
+
+function muteSwitch() {
+  return screen.getByRole("switch", { name: "소리 끄기" });
+}
+
+async function toggleMute() {
+  await act(async () => {
+    fireEvent.click(muteSwitch());
+  });
+}
+
+test("저장된 설정이 소리 끄기면 첫 인사도 소리 없이 글자로만 나오고 곧바로 입력할 수 있다", async () => {
+  window.localStorage.setItem(MUTE_KEY, "1");
+  chatReplies = ["Hello, quietly."];
+  const { user, speech } = setup();
+
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+
+  expect(await screen.findByText("Hello, quietly.")).toBeInTheDocument();
+  expect(speech.speak).not.toHaveBeenCalled();
+  expect(muteSwitch()).toHaveAttribute("aria-checked", "true");
+  await waitFor(() => expect(textBox()).toBeEnabled());
+  expect(screen.queryByText("말하는 중...")).not.toBeInTheDocument();
+});
+
+test("대화 중에 소리 끄기를 켜면 다음 답은 글자로만 나오고, 끄면 다시 소리가 난다", async () => {
+  chatReplies = ["Hello!", "Quiet reply.", "Loud reply."];
+  const { user, speech } = setup();
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+  await screen.findByText("Hello!");
+  await waitFor(() => expect(textBox()).toBeEnabled());
+  expect(speech.speak).toHaveBeenCalledTimes(1);
+
+  await toggleMute();
+  await typeText("One");
+  await submitForm();
+  expect(await screen.findByText("Quiet reply.")).toBeInTheDocument();
+  expect(speech.speak).toHaveBeenCalledTimes(1);
+  expect(textBox()).toBeEnabled();
+
+  await toggleMute();
+  await typeText("Two");
+  await submitForm();
+  expect(await screen.findByText("Loud reply.")).toBeInTheDocument();
+  expect(speech.speak).toHaveBeenLastCalledWith("Loud reply.");
+});
+
+test("페르소나가 말하는 중에 소리 끄기를 켜면 재생이 멈추고 곧바로 입력할 수 있다", async () => {
+  const { user, speech } = setup();
+  const stop = vi.fn();
+  (speech as SpeechPort).stop = stop;
+  speech.speak = vi.fn(() => new Promise<void>(() => {})); // 끝나지 않는 재생
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+  await screen.findByText("reply 1");
+  await waitFor(() => expect(screen.getByText("말하는 중...")).toBeInTheDocument());
+  expect(textBox()).toBeDisabled();
+
+  await toggleMute();
+
+  expect(stop).toHaveBeenCalled();
+  await waitFor(() => expect(textBox()).toBeEnabled());
+});
+
+test("소리 끄기 설정은 새 대화로 넘어가도 새로고침해도 유지된다", async () => {
+  const { user } = setup();
+  await startConversation(user);
+  await toggleMute();
+  expect(window.localStorage.getItem(MUTE_KEY)).toBe("1");
+
+  await user.click(screen.getByRole("button", { name: "종료" }));
+  await screen.findByRole("heading", { name: "교정" });
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+  await screen.findByText("reply 2");
+  expect(muteSwitch()).toHaveAttribute("aria-checked", "true");
+
+  cleanup(); // 새로고침처럼 화면을 새로 만든다
+  const second = setup();
+  await second.user.click(screen.getByRole("button", { name: "새 대화" }));
+  await second.user.click(screen.getByRole("button", { name: "대화 시작" }));
+  await screen.findByText(/reply/);
+  expect(muteSwitch()).toHaveAttribute("aria-checked", "true");
+  expect(second.speech.speak).not.toHaveBeenCalled();
+});
+
+test("저장소를 쓸 수 없어도 소리 끄기는 동작한다", async () => {
+  const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("denied");
+  });
+  const { user, speech } = setup();
+  await startConversation(user);
+  await waitFor(() => expect(textBox()).toBeEnabled());
+
+  await toggleMute();
+  await typeText("Hi");
+  await submitForm();
+
+  expect(await screen.findByText("1/20")).toBeInTheDocument();
+  expect(speech.speak).toHaveBeenCalledTimes(1); // 첫 인사 때만
+  setItem.mockRestore();
 });

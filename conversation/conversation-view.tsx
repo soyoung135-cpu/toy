@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 
 import { requestCorrections, requestReply } from "./client-api";
 import { isEndPhrase } from "./end-phrase";
@@ -49,6 +50,17 @@ function listenErrorMessage(error: unknown): string {
   return "음성을 인식하지 못했습니다. 다시 눌러 주세요.";
 }
 
+const MUTE_STORAGE_KEY = "conversation:sound-muted";
+
+// 저장소를 못 읽는 브라우저에서는 소리가 켜진 채로 시작한다.
+function readMuted(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(MUTE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function ConversationView({ speech, random }: ConversationViewProps) {
   const [speechPort] = useState<SpeechPort>(() => speech ?? createBrowserSpeech());
   const rand = random ?? Math.random;
@@ -60,6 +72,9 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [corrections, setCorrections] = useState<Correction[] | null>(null);
   const [draft, setDraft] = useState("");
+  const [muted, setMuted] = useState(readMuted);
+  // 응답을 기다리는 사이에 스위치를 바꿔도 그 응답에 적용되도록 ref로도 들고 있는다.
+  const mutedRef = useRef(muted);
 
   // 대화가 바뀌거나 끝난 뒤에 늦게 도착한 응답이 화면을 덮어쓰지 않게 한다.
   const runId = useRef(0);
@@ -93,9 +108,28 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
     const text = await requestReply(current.id, history);
     if (id !== runId.current) return;
     setMessages([...history, { role: "assistant", content: text }]);
+    if (mutedRef.current) {
+      setStatus("ready");
+      return;
+    }
     setStatus("speaking");
     await speechPort.speak(text).catch(() => {});
     if (id === runId.current) setStatus("ready");
+  }
+
+  function changeMuted(next: boolean) {
+    mutedRef.current = next;
+    setMuted(next);
+    try {
+      window.localStorage.setItem(MUTE_STORAGE_KEY, next ? "1" : "0");
+    } catch {
+      // 저장하지 못해도 이번 화면에서는 그대로 동작한다.
+    }
+    // 말하는 중에 끄면 재생을 멈추고 바로 입력할 수 있게 한다.
+    if (next && status === "speaking") {
+      speechPort.stop?.();
+      setStatus("ready");
+    }
   }
 
   async function startConversation() {
@@ -250,9 +284,20 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
               {persona.name}
               <span className="ml-2 text-sm text-muted-foreground">{persona.role}</span>
             </p>
-            <p className="text-sm font-medium">
-              {goalReached ? `${turns}턴 · 목표 달성` : `${turns}/${TURN_GOAL}`}
-            </p>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Switch
+                  size="sm"
+                  aria-label="소리 끄기"
+                  checked={muted}
+                  onCheckedChange={changeMuted}
+                />
+                소리 끄기
+              </label>
+              <p className="text-sm font-medium">
+                {goalReached ? `${turns}턴 · 목표 달성` : `${turns}/${TURN_GOAL}`}
+              </p>
+            </div>
           </div>
           <Progress value={Math.min(turns, TURN_GOAL)} max={TURN_GOAL} />
         </div>
