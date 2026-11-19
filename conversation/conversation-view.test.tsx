@@ -11,6 +11,8 @@ let feedbackCalls: Json[];
 let chatReplies: (string | "FAIL" | "HOLD")[];
 // "HOLD" 응답은 releaseHold()를 부를 때까지 붙잡아 둔다.
 let releaseHold: (() => void) | null;
+// 교정 요청을 "<상태>:<오류 코드>"로 실패시킨다.
+let feedbackFailure: string | null;
 let corrections: { original: string; corrected: string; explanation: string }[];
 
 function stubApi() {
@@ -22,6 +24,11 @@ function stubApi() {
         chatCalls.push(body);
         const next = chatReplies.shift() ?? `reply ${chatCalls.length}`;
         if (next === "FAIL") return Response.json({ error: "x" }, { status: 502 });
+        if (next.startsWith("FAIL:")) {
+          // "FAIL:<상태>:<오류 코드>" 형태로 서버가 돌려주는 실패를 흉내 낸다.
+          const [, status, code] = next.split(":");
+          return Response.json({ error: code }, { status: Number(status) });
+        }
         if (next === "HOLD") {
           await new Promise<void>((resolve) => {
             releaseHold = resolve;
@@ -32,6 +39,10 @@ function stubApi() {
       }
       if (url === "/api/feedback") {
         feedbackCalls.push(body);
+        if (feedbackFailure) {
+          const [status, code] = feedbackFailure.split(":");
+          return Response.json({ error: code }, { status: Number(status) });
+        }
         return Response.json({ corrections });
       }
       throw new Error(`unexpected ${url}`);
@@ -85,6 +96,7 @@ async function say(user: ReturnType<typeof createUser>) {
 beforeEach(() => {
   window.localStorage.clear();
   releaseHold = null;
+  feedbackFailure = null;
   chatCalls = [];
   feedbackCalls = [];
   chatReplies = [];
@@ -562,4 +574,67 @@ test("저장소를 쓸 수 없어도 소리 끄기는 동작한다", async () =>
   expect(await screen.findByText("1/20")).toBeInTheDocument();
   expect(speech.speak).toHaveBeenCalledTimes(1); // 첫 인사 때만
   setItem.mockRestore();
+});
+
+// ---- 실패 이유 안내 ----
+
+const FAILURE_CASES: [string, string][] = [
+  ["FAIL:503:llm_not_configured", "OpenAI 키"],
+  ["FAIL:502:upstream_failed", "AI 서비스"],
+  ["FAIL:401:unauthorized", "다시 로그인"],
+];
+
+test.each(FAILURE_CASES)(
+  "대화를 시작할 때 응답이 %s 로 실패하면 이유를 화면에 알려 준다",
+  async (reply, reason) => {
+    chatReplies = [reply];
+    const { user } = setup();
+
+    await user.click(screen.getByRole("button", { name: "새 대화" }));
+    await user.click(screen.getByRole("button", { name: "대화 시작" }));
+
+    const message = await screen.findByText(/응답을 받지 못했습니다/);
+    expect(message).toHaveTextContent(reason);
+  },
+);
+
+test.each(FAILURE_CASES)(
+  "말한 뒤 응답이 %s 로 실패하면 이유를 화면에 알려 준다",
+  async (reply, reason) => {
+    chatReplies = ["Hello!", reply];
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: "새 대화" }));
+    await user.click(screen.getByRole("button", { name: "대화 시작" }));
+    await screen.findByText("Hello!");
+    await waitFor(() => expect(textBox()).toBeEnabled());
+
+    await typeText("This will fail");
+    await submitForm();
+
+    const message = await screen.findByText(/응답을 받지 못했습니다/);
+    expect(message).toHaveTextContent(reason);
+  },
+);
+
+test("알 수 없는 실패는 이유를 지어내지 않고 기본 안내만 보여 준다", async () => {
+  chatReplies = ["FAIL:500:something_else"];
+  const { user } = setup();
+
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+
+  const message = await screen.findByText(/응답을 받지 못했습니다/);
+  expect(message).not.toHaveTextContent("OpenAI");
+  expect(message).not.toHaveTextContent("로그인");
+});
+
+test("교정이 키 누락으로 실패하면 이유를 화면에 알려 준다", async () => {
+  feedbackFailure = "503:llm_not_configured";
+  const { user } = setup();
+  await startConversation(user);
+
+  await user.click(screen.getByRole("button", { name: "종료" }));
+
+  const message = await screen.findByText(/교정을 불러오지 못했습니다/);
+  expect(message).toHaveTextContent("OpenAI 키");
 });

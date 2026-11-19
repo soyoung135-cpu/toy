@@ -156,3 +156,15 @@ test("키가 없으면 개발 환경에서는 가짜 교정을 주고 운영 환
   const prod = await POST(feedbackRequest({ messages }));
   expect(prod.status).toBe(503);
 });
+
+test("키가 없어 막을 때 서버 로그에 이유를 남긴다(키 값은 남기지 않는다)", async () => {
+  vi.stubEnv("OPENAI_API_KEY", "");
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubGlobal("fetch", vi.fn());
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await POST(feedbackRequest({ messages }));
+
+  expect(log).toHaveBeenCalledWith(expect.stringContaining("OPENAI_API_KEY"));
+  log.mockRestore();
+});

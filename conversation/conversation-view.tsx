@@ -16,7 +16,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 
-import { requestCorrections, requestReply } from "./client-api";
+import { describeFailure, requestCorrections, requestReply } from "./client-api";
 import { isEndPhrase } from "./end-phrase";
 import { pickPersona } from "./personas";
 import { createBrowserSpeech, type SpeechPort } from "./speech";
@@ -140,9 +140,9 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
     setPhase("chatting");
     try {
       await reply(persona, [], id);
-    } catch {
+    } catch (failure) {
       if (id !== runId.current) return;
-      setError("응답을 받지 못했습니다. 잠시 후 대화를 다시 시작해 주세요.");
+      setError(["응답을 받지 못했습니다.", describeFailure(failure), "잠시 후 대화를 다시 시작해 주세요."].filter(Boolean).join(" "));
       setStatus("ready");
     }
   }
@@ -188,11 +188,11 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
     setMessages(withUser);
     try {
       await reply(current, withUser, id);
-    } catch {
+    } catch (failure) {
       if (id !== runId.current) return;
       // 답을 못 받은 내 말은 기록에서 빼서 턴이 어긋나지 않게 한다.
       setMessages(messages);
-      setError(`응답을 받지 못했습니다. ${retryHint}`);
+      setError(["응답을 받지 못했습니다.", describeFailure(failure), retryHint].filter(Boolean).join(" "));
       setStatus("ready");
       onReplyFailed?.();
     }
@@ -230,8 +230,8 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
     try {
       const result = await requestCorrections(history);
       if (id === runId.current) setCorrections(result);
-    } catch {
-      if (id === runId.current) setError("교정을 불러오지 못했습니다.");
+    } catch (failure) {
+      if (id === runId.current) setError(["교정을 불러오지 못했습니다.", describeFailure(failure)].filter(Boolean).join(" "));
     }
   }
 

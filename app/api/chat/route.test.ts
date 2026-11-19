@@ -252,3 +252,15 @@ test("OpenAI가 실패하면 502이고 오류 본문에 키가 없다", async ()
   expect(response.status).toBe(502);
   expect(text).not.toContain(SECRET);
 });
+
+test("키가 없어 막을 때 서버 로그에 이유를 남긴다(키 값은 남기지 않는다)", async () => {
+  vi.stubEnv("OPENAI_API_KEY", "");
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubGlobal("fetch", vi.fn());
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await POST(chatRequest({ personaId: "hotel-front-desk", messages: [] }));
+
+  expect(log).toHaveBeenCalledWith(expect.stringContaining("OPENAI_API_KEY"));
+  log.mockRestore();
+});

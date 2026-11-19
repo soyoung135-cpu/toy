@@ -20,6 +20,8 @@ function badRequest() {
 }
 
 function unavailable() {
+  // 키가 없어서 막는 것이므로 원인을 로그에 남긴다. 키 값은 남기지 않는다.
+  console.error("[openai] OPENAI_API_KEY is not set, so the request was refused");
   return Response.json({ error: "llm_not_configured" }, { status: 503 });
 }
 
