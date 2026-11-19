@@ -114,20 +114,12 @@
       "computedHash": "abe7b5e77b26f95ab21304b10ce1003a41e4e75b601505d76c8a0294e33a450d",
       "installMode": "copy"
     },
-    "openrouter-models": {
-      "source": "OpenRouterTeam/skills",
-      "commit": "a110aad6072364da5e8017efc7a7873262164b11",
+    "openai-docs": {
+      "source": "openai/skills",
+      "commit": "49f948faa9258a0c61caceaf225e179651397431",
       "sourceType": "github",
-      "skillPath": "skills/openrouter-models/SKILL.md",
-      "computedHash": "0d6c3c19a3f07bcd568701fed22fb97babc2d0387b42aeaa7900ddd6b0f1a4a0",
-      "installMode": "copy"
-    },
-    "openrouter-typescript-sdk": {
-      "source": "OpenRouterTeam/skills",
-      "commit": "a110aad6072364da5e8017efc7a7873262164b11",
-      "sourceType": "github",
-      "skillPath": "skills/openrouter-typescript-sdk/SKILL.md",
-      "computedHash": "162dd6de9156fbaba702a8767b61598283d29a9ee3383988e485e812b826fdd0",
+      "skillPath": "skills/.curated/openai-docs/SKILL.md",
+      "computedHash": "836d1fec6c7c5460feb082fd9c86725cbe10486e009e1a3e9e8ebf877a33edd5",
       "installMode": "copy"
     },
     "pr": {

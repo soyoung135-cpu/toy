@@ -51,6 +51,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Vercel** (호스팅): 배포·환경 변수·요금제 제한과 관련된 작업을 시작할 때 공식 문서 색인 `https://vercel.com/llms.txt`를 가져와 필요한 페이지를 읽는다. 저장소에 복사본을 두지 않으며, 내용은 프로젝트의 `next` 버전과 Vercel 프로젝트 설정에 맞춰 확인한다. 배포 절차 자체는 `deploy-to-vercel` 스킬을 따른다.
 <!-- END add-stack-context: vercel -->
 
-<!-- BEGIN add-stack-context: openrouter -->
-- **OpenRouter** (LLM 제공자, `docs/decisions/llm-models.md`): LLM 호출을 추가하거나 바꿀 때 공식 문서 색인 `https://openrouter.ai/llms.txt`를 가져와 필요한 페이지를 읽는다. 저장소에 복사본을 두지 않으며, 설치된 OpenRouter SDK 버전과 맞춰 확인한다. 코드 작성은 `openrouter-typescript-sdk` 스킬, 모델 ID·가격 확인은 `openrouter-models` 스킬을 따른다.
-<!-- END add-stack-context: openrouter -->
+<!-- BEGIN add-stack-context: openai -->
+- **OpenAI API** (LLM 제공자, `docs/decisions/llm-models.md`): LLM 호출을 추가하거나 바꿀 때 공식 문서 색인 `https://developers.openai.com/api/docs/llms.txt`를 가져와 필요한 페이지를 읽는다(각 페이지는 URL 끝에 `.md`를 붙이면 마크다운으로 받는다). 저장소에 복사본을 두지 않는다. 모델 ID, 가격, 파라미터는 `openai-docs` 스킬과 위 문서를 따른다.
+<!-- END add-stack-context: openai -->
