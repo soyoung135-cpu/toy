@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
+const { requireUser } = vi.hoisted(() => ({
+  requireUser: vi.fn(async (): Promise<Response | null> => null),
+}));
+vi.mock("@/auth/server", () => ({ requireUser }));
+
 import { POST } from "./route";
 
 const SECRET = "sk-or-test-secret-123";
@@ -40,6 +45,8 @@ const messages = [
 ];
 
 beforeEach(() => {
+  requireUser.mockReset();
+  requireUser.mockResolvedValue(null);
   vi.unstubAllEnvs();
   vi.stubEnv("OPENAI_API_KEY", SECRET);
 });
@@ -77,6 +84,19 @@ test("교정은 gpt-6-luna를 pro 모드로 요청하고 모델이 낸 JSON을 �
   expect(sent.reasoning).toEqual({ mode: "pro" });
   expect(sent.store).toBe(false);
   expect(text).not.toContain(SECRET);
+});
+
+test("로그인하지 않았으면 401을 돌려주고 OpenAI를 부르지 않는다", async () => {
+  requireUser.mockResolvedValueOnce(
+    Response.json({ error: "unauthorized" }, { status: 401 }),
+  );
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+
+  const response = await POST(feedbackRequest({ messages }));
+
+  expect(response.status).toBe(401);
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 test("내가 한 말이 없으면 모델을 부르지 않고 빈 교정을 돌려준다", async () => {

@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
+const { requireUser } = vi.hoisted(() => ({
+  requireUser: vi.fn(async (): Promise<Response | null> => null),
+}));
+vi.mock("@/auth/server", () => ({ requireUser }));
+
 import { POST } from "./route";
 
 const SECRET = "sk-or-test-secret-123";
@@ -48,6 +53,8 @@ function sentBody(fetchMock: FetchMock) {
 }
 
 beforeEach(() => {
+  requireUser.mockReset();
+  requireUser.mockResolvedValue(null);
   vi.unstubAllEnvs();
   vi.stubEnv("OPENAI_API_KEY", SECRET);
 });
@@ -79,6 +86,21 @@ test("키가 있으면 OpenAI Responses API에 gpt-6-luna로 요청하고 답만
   expect(sent.store).toBe(false);
   // AC9: 응답 어디에도 키가 나타나지 않는다.
   expect(text).not.toContain(SECRET);
+});
+
+test("로그인하지 않았으면 401을 돌려주고 OpenAI를 부르지 않는다", async () => {
+  requireUser.mockResolvedValueOnce(
+    Response.json({ error: "unauthorized" }, { status: 401 }),
+  );
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+
+  const response = await POST(
+    chatRequest({ personaId: "hotel-front-desk", messages: [] }),
+  );
+
+  expect(response.status).toBe(401);
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 test("OPENAI_BASE_URL이 있으면 그 주소의 /responses로 요청한다", async () => {
