@@ -3,7 +3,7 @@
 제품 맥락: [PRODUCT.md](../../../PRODUCT.md) — 이 작업은 핵심 흐름(새 대화 → 음성 대화 → 종료 → 교정)을 PC에서 처음으로 끝까지 한 번 돌리는 가장 얇은 형태다. 용어는 [GLOSSARY.md](../../../GLOSSARY.md)를 따른다(페르소나, 대화, 턴, 교정).
 
 연결된 결정 계약:
-- [llm-models](../../decisions/llm-models.md) — OpenRouter와 대화·교정에 쓸 모델, 교정 품질 미달 시 올릴 모델. 모델 선택은 이 계약을 따른다.
+- [llm-models](../../decisions/llm-models.md) — OpenAI 직접 호출과 대화·교정에 쓸 모델·설정, 교정 품질 미달 시 올릴 모델. 모델 선택은 이 계약을 따른다.
 - [deployment](../../decisions/deployment.md) — 이번 작업은 배포하지 않지만, "LLM API 키는 서버에서만 쓰고 브라우저로 내려보내지 않는다"는 원칙은 이 계약을 따른다.
 - [ui-composition](../../decisions/ui-composition.md) — 화면 구성은 shadcn 공식 component를 기본으로 한다.
 
@@ -40,7 +40,7 @@ PC에서 개발 서버를 켜고 데스크톱 Chrome으로 확인한다.
 - AC6. 대화 중에는 페르소나가 역할을 깨고 내 문법을 고쳐 주지 않는다. 교정은 종료 뒤 교정 화면에서만 보인다.
 - AC7. 교정 화면에 고칠 것이 있는 내 문장마다 원래 문장, 고친 문장, 한국어 설명이 보인다. 고칠 것이 없으면 없다고 표시된다.
 - AC8. 교정 화면에서 새 대화를 시작하면 AC1의 상태로 돌아간다.
-- AC9. 브라우저 개발자 도구의 네트워크 응답과 페이지 소스 어디에도 OpenRouter API 키가 나타나지 않는다.
+- AC9. 브라우저 개발자 도구의 네트워크 응답과 페이지 소스 어디에도 OpenAI API 키가 나타나지 않는다.
 
 LLM 출력 품질 기준(eval로 증명한다. 실행마다 결과가 다르므로 아래 기준을 낮추지 않는다):
 
@@ -50,7 +50,7 @@ LLM 출력 품질 기준(eval로 증명한다. 실행마다 결과가 다르므�
 ## 확정된 제약과 이유
 
 - **첫 결과는 PC에서 확인한다**: 개발 서버의 `localhost`에서는 배포 없이도 브라우저가 마이크를 허용하므로, 배포와 아이폰 대응 없이 대화가 쓸 만한지를 먼저 확인한다. 사용자 확정.
-- **모델**: OpenRouter로 호출한다. 대화 응답은 `openai/gpt-6-luna`, 교정은 `openai/gpt-6-luna-pro`이며, 교정이 AC10을 통과하지 못하면 `anthropic/claude-sonnet-5.5`로 올린다. 버전 고정 ID만 쓴다. 이유와 비용 추정은 [llm-models](../../decisions/llm-models.md)에 있다.
+- **모델**: OpenAI API를 직접 호출한다. 대화 응답은 `gpt-6-luna`(`reasoning.effort: low`), 교정은 같은 `gpt-6-luna`에 `reasoning.mode: pro`를 켠 것이며, 교정이 AC10을 통과하지 못하면 `gpt-6.1-terra`로 올린다. 버전 고정 ID만 쓰고 `store: false`로 보낸다. 이유와 비용 추정은 [llm-models](../../decisions/llm-models.md)에 있다.
 - **턴 정의**: 내가 한 번 말하고 페르소나가 한 번 답하면 1턴이다. 사용자 확정.
 - **20턴은 목표이지 한도가 아니다**: 도달하면 달성을 표시하고 마무리를 제안하지만 대화는 계속할 수 있다. 말문을 틔우는 게 목적이라 더 말하고 싶을 때 막지 않는다. 사용자 확정.
 - **종료는 영어 문구와 버튼 둘 다**: 음성 인식은 영어로 듣고 있어서 한국어 "종료하자"를 알아듣지 못한다. 영어로 마무리하는 것도 연습이 되고, 인식이 안 될 때는 버튼으로 확실히 끝낸다. 사용자 확정.
@@ -87,7 +87,7 @@ LLM 출력 품질 기준(eval로 증명한다. 실행마다 결과가 다르므�
 
 ## Setup before implementation
 
-- OpenRouter 계정, API 키 발급, 크레딧 충전(Claude 등 다른 구독과는 별도) — 대화와 교정 호출에 필요하다. 완료 조건: 앱 밖에서 그 키로 OpenRouter API에 `openai/gpt-6-luna`와 `openai/gpt-6-luna-pro`를 직접 호출해 둘 다 정상 응답을 받는다.
+- OpenAI API 키 발급과 결제 설정(ChatGPT 구독과는 별도) — 대화와 교정 호출에 필요하다. 완료 조건: 앱 밖에서 그 키로 OpenAI Responses API에 `gpt-6-luna`를 직접 호출해 정상 응답을 받는다.
 
 ## Post-release check
 

@@ -13,9 +13,20 @@ function feedbackRequest(body: unknown) {
   });
 }
 
-function openRouterReply(content: string) {
+// Responses API의 실제 모양: 추론 항목과 메시지 항목이 섞여 온다.
+function openAiReply(text: string) {
   return new Response(
-    JSON.stringify({ choices: [{ message: { role: "assistant", content } }] }),
+    JSON.stringify({
+      status: "completed",
+      output: [
+        { type: "reasoning", id: "rs_1", summary: [] },
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text }],
+        },
+      ],
+    }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
 }
@@ -30,7 +41,7 @@ const messages = [
 
 beforeEach(() => {
   vi.unstubAllEnvs();
-  vi.stubEnv("OPENROUTER_API_KEY", SECRET);
+  vi.stubEnv("OPENAI_API_KEY", SECRET);
 });
 
 afterEach(() => {
@@ -38,7 +49,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-test("교정은 gpt-6-luna-pro로 요청하고 모델이 낸 JSON을 교정 목록으로 돌려준다", async () => {
+test("교정은 gpt-6-luna를 pro 모드로 요청하고 모델이 낸 JSON을 교정 목록으로 돌려준다", async () => {
   const modelJson = JSON.stringify({
     corrections: [
       {
@@ -50,7 +61,7 @@ test("교정은 gpt-6-luna-pro로 요청하고 모델이 낸 JSON을 교정 목�
     ],
   });
   const fetchMock = vi.fn(async () =>
-    openRouterReply("```json\n" + modelJson + "\n```"),
+    openAiReply("```json\n" + modelJson + "\n```"),
   );
   vi.stubGlobal("fetch", fetchMock);
 
@@ -59,8 +70,12 @@ test("교정은 gpt-6-luna-pro로 요청하고 모델이 낸 JSON을 교정 목�
 
   expect(response.status).toBe(200);
   expect(JSON.parse(text)).toEqual(JSON.parse(modelJson));
-  const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-  expect(JSON.parse(init.body as string).model).toBe("openai/gpt-6-luna-pro");
+  const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe("https://api.openai.com/v1/responses");
+  const sent = JSON.parse(init.body as string);
+  expect(sent.model).toBe("gpt-6-luna");
+  expect(sent.reasoning).toEqual({ mode: "pro" });
+  expect(sent.store).toBe(false);
   expect(text).not.toContain(SECRET);
 });
 
@@ -78,7 +93,7 @@ test("내가 한 말이 없으면 모델을 부르지 않고 빈 교정을 돌�
 });
 
 test("모델이 JSON이 아닌 답을 내면 502이다", async () => {
-  vi.stubGlobal("fetch", vi.fn(async () => openRouterReply("Sorry, no JSON.")));
+  vi.stubGlobal("fetch", vi.fn(async () => openAiReply("Sorry, no JSON.")));
 
   const response = await POST(feedbackRequest({ messages }));
 
@@ -89,7 +104,7 @@ test("교정 항목의 모양이 틀리면 502이다", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
-      openRouterReply(JSON.stringify({ corrections: [{ original: "x" }] })),
+      openAiReply(JSON.stringify({ corrections: [{ original: "x" }] })),
     ),
   );
 
@@ -107,7 +122,7 @@ test("잘못된 본문은 400이다", async () => {
 });
 
 test("키가 없으면 개발 환경에서는 가짜 교정을 주고 운영 환경에서는 503이다", async () => {
-  vi.stubEnv("OPENROUTER_API_KEY", "");
+  vi.stubEnv("OPENAI_API_KEY", "");
   vi.stubGlobal("fetch", vi.fn());
 
   vi.stubEnv("NODE_ENV", "development");

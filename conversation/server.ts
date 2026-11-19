@@ -5,7 +5,7 @@ import {
   FEEDBACK_MODEL,
   hasApiKey,
   UpstreamError,
-} from "./openrouter";
+} from "./openai";
 import { PERSONAS } from "./personas";
 import {
   buildFeedbackPrompt,
@@ -74,12 +74,10 @@ export async function handleChat(request: Request): Promise<Response> {
   try {
     const reply = await complete({
       model: CHAT_MODEL,
-      maxTokens: 1000,
-      messages: [
-        { role: "system", content: buildPersonaPrompt(persona, messages) },
-        { role: "user", content: START_SIGNAL },
-        ...messages,
-      ],
+      reasoning: { effort: "low" },
+      maxOutputTokens: 1000,
+      instructions: buildPersonaPrompt(persona, messages),
+      input: [{ role: "user", content: START_SIGNAL }, ...messages],
     });
     return Response.json({ reply });
   } catch (error) {
@@ -131,7 +129,7 @@ export async function handleFeedback(request: Request): Promise<Response> {
         {
           original: learnerLines[0].content,
           corrected: learnerLines[0].content,
-          explanation: "개발용 가짜 교정입니다. OPENROUTER_API_KEY가 없어 실제 교정을 하지 않았습니다.",
+          explanation: "개발용 가짜 교정입니다. OPENAI_API_KEY가 없어 실제 교정을 하지 않았습니다.",
         },
       ],
     });
@@ -140,11 +138,10 @@ export async function handleFeedback(request: Request): Promise<Response> {
   try {
     const text = await complete({
       model: FEEDBACK_MODEL,
-      maxTokens: 8000,
-      messages: [
-        { role: "system", content: buildFeedbackPrompt() },
-        { role: "user", content: formatTranscript(messages) },
-      ],
+      reasoning: { mode: "pro" },
+      maxOutputTokens: 8000,
+      instructions: buildFeedbackPrompt(),
+      input: [{ role: "user", content: formatTranscript(messages) }],
     });
     const corrections = parseCorrections(text);
     if (!corrections) return upstreamFailed();

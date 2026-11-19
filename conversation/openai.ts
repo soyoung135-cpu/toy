@@ -1,0 +1,78 @@
+// 서버에서만 쓴다. OPENAI_API_KEY를 읽으므로 클라이언트 코드에서 import하지 않는다.
+
+/** 모델 선택의 근거는 docs/decisions/llm-models.md에 있다. */
+export const CHAT_MODEL = "gpt-6-luna";
+export const FEEDBACK_MODEL = "gpt-6-luna";
+
+const ENDPOINT = "https://api.openai.com/v1/responses";
+
+export class UpstreamError extends Error {}
+
+export function hasApiKey(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
+interface InputMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface Reasoning {
+  effort?: "none" | "low" | "medium" | "high";
+  mode?: "standard" | "pro";
+}
+
+interface OutputItem {
+  type?: string;
+  content?: { type?: string; text?: unknown }[];
+}
+
+export async function complete(options: {
+  model: string;
+  instructions: string;
+  input: InputMessage[];
+  reasoning: Reasoning;
+  maxOutputTokens: number;
+}): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: options.model,
+        instructions: options.instructions,
+        input: options.input,
+        reasoning: options.reasoning,
+        max_output_tokens: options.maxOutputTokens,
+        // 연습 대화 내용이 OpenAI에 저장되지 않게 한다.
+        store: false,
+      }),
+    });
+  } catch {
+    throw new UpstreamError("OpenAI request failed");
+  }
+  if (!response.ok) {
+    throw new UpstreamError(`OpenAI responded ${response.status}`);
+  }
+
+  const data = (await response.json().catch(() => null)) as {
+    output?: OutputItem[];
+  } | null;
+  // 추론 항목은 건너뛰고 메시지 항목의 output_text만 이어 붙인다.
+  const text = (data?.output ?? [])
+    .filter((item) => item.type === "message")
+    .flatMap((item) => item.content ?? [])
+    .filter((part) => part.type === "output_text" && typeof part.text === "string")
+    .map((part) => part.text as string)
+    .join("")
+    .trim();
+  if (text === "") {
+    // 추론에 토큰을 다 쓰면 status가 incomplete이고 답 글자가 비어 온다.
+    throw new UpstreamError("OpenAI returned no text");
+  }
+  return text;
+}
