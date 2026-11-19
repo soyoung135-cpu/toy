@@ -76,6 +76,34 @@ test("이메일이나 비밀번호가 틀리면 틀린 쪽을 알려 주지 않�
   expect(push).not.toHaveBeenCalled();
 });
 
+test("이메일 확인이 안 된 계정이면 비밀번호가 틀렸다고 하지 않고 확인 처리가 필요하다고 안내한다", async () => {
+  signInWithPassword.mockResolvedValue({
+    error: { message: "Email not confirmed", status: 400, code: "email_not_confirmed" },
+  });
+  render(<LoginForm />);
+
+  await submit("me@example.com", "secret-pass");
+
+  expect(
+    await screen.findByText(
+      "이메일 확인이 끝나지 않은 계정입니다. Supabase 대시보드에서 이 사용자를 확인 처리해 주세요.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("이메일 또는 비밀번호가 올바르지 않습니다.")).not.toBeInTheDocument();
+  expect(push).not.toHaveBeenCalled();
+});
+
+test("오류 코드가 없는 400 응답은 틀린 이메일·비밀번호로 안내한다", async () => {
+  signInWithPassword.mockResolvedValue({ error: { message: "bad request", status: 400 } });
+  render(<LoginForm />);
+
+  await submit("me@example.com", "wrong");
+
+  expect(
+    await screen.findByText("이메일 또는 비밀번호가 올바르지 않습니다."),
+  ).toBeInTheDocument();
+});
+
 test("Supabase가 연결 오류를 오류 값으로 돌려줘도 비밀번호가 틀렸다고 안내하지 않는다", async () => {
   signInWithPassword.mockResolvedValue({
     error: { message: "Failed to fetch", status: 0, name: "AuthRetryableFetchError" },

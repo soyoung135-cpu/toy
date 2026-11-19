@@ -49,7 +49,7 @@
 ## 가정 (바꿀 수 있음)
 
 - 세션 유지 기간과 로그인 시도 제한은 Supabase 기본값을 쓴다.
-- 로그인 실패 안내는 틀린 쪽을 알려 주지 않는 한 문장(이메일 또는 비밀번호가 올바르지 않음)으로 보여 준다.
+- 로그인 실패 안내는 원인별로 나눈다. 틀린 이메일·비밀번호는 어느 쪽이 틀렸는지 알려 주지 않는 한 문장(이메일 또는 비밀번호가 올바르지 않음)으로, 이메일 확인이 안 된 계정은 확인 처리가 필요하다는 안내로, 연결 오류 같은 나머지는 잠시 후 다시 시도하라는 안내로 보여 준다.
 - 로그인 화면의 문구는 한국어다.
 
 ## 범위 밖과 이유
@@ -68,7 +68,7 @@
 ## Setup before implementation
 
 - Supabase 프로젝트의 Project URL과 공개용(publishable) 키를 로컬 `.env.local`과 Vercel 환경 변수에 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`로 넣는다(비밀 키와 service_role 키는 넣지 않는다). 완료 조건: 두 값이 설정된 개발 서버에서 로그인하지 않고 `/`를 열면 `/login`으로 이동한다.
-- Supabase 대시보드(Authentication)에서 새 사용자 가입을 끄고, 내 계정(이메일·비밀번호)을 이메일 확인된 상태로 직접 만든다. 완료 조건: 프로젝트의 `/auth/v1/signup`을 앱 밖에서 직접 호출하면 가입이 거절되고(`signup_disabled`), 내 계정으로 로그인이 성공한다.
+- Supabase 대시보드(Authentication)에서 이메일 확인(Confirm email)을 끄고(사용자 확정, 설정 위치는 Auth Providers 페이지의 Email), 새 사용자 가입을 끄고, 내 계정(이메일·비밀번호)을 직접 만든다. 이미 확인 안 된 상태로 만든 계정이 있으면 사용자 목록에서 확인 처리한다. 완료 조건: 프로젝트의 `/auth/v1/signup`을 앱 밖에서 직접 호출하면 가입이 거절되고(`signup_disabled`), 내 계정으로 로그인이 성공한다.
 
 ## Post-release check
 

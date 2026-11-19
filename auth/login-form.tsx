@@ -21,14 +21,22 @@ import { createClient } from "./supabase-client";
 const WRONG_CREDENTIALS = "이메일 또는 비밀번호가 올바르지 않습니다.";
 const TRY_LATER = "로그인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 
+const NOT_CONFIRMED =
+  "이메일 확인이 끝나지 않은 계정입니다. Supabase 대시보드에서 이 사용자를 확인 처리해 주세요.";
+
 interface SignInError {
   status?: number;
   code?: string;
 }
 
-// 틀린 이메일·비밀번호만 그렇게 안내하고, 연결 오류나 제한 같은 다른 실패는 따로 안내한다.
-function isWrongCredentials(error: SignInError): boolean {
-  return error.code === "invalid_credentials" || error.status === 400;
+// 원인에 맞는 안내를 고른다. 틀린 이메일·비밀번호만 그렇게 안내하고,
+// 확인 안 된 계정이나 연결 오류 같은 다른 실패는 따로 안내한다.
+function signInErrorMessage(error: SignInError): string {
+  if (error.code === "email_not_confirmed") return NOT_CONFIRMED;
+  const wrongCredentials = error.code
+    ? error.code === "invalid_credentials"
+    : error.status === 400;
+  return wrongCredentials ? WRONG_CREDENTIALS : TRY_LATER;
 }
 
 export function LoginForm() {
@@ -49,7 +57,7 @@ export function LoginForm() {
         password,
       });
       if (signInError) {
-        setError(isWrongCredentials(signInError) ? WRONG_CREDENTIALS : TRY_LATER);
+        setError(signInErrorMessage(signInError));
         return;
       }
       const next = new URLSearchParams(window.location.search).get("next");
