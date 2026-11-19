@@ -8,6 +8,13 @@ const { getClaims, createServerClient } = vi.hoisted(() => {
 });
 vi.mock("@supabase/ssr", () => ({ createServerClient }));
 
+// 임시 로그인 우회 스위치. 기본 동작을 검증하는 테스트는 꺼 둔 채로 돌린다.
+const bypass = vi.hoisted(() => ({ disabled: false }));
+vi.mock("./config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./config")>()),
+  isLoginDisabled: () => bypass.disabled,
+}));
+
 import { updateSession } from "./proxy";
 
 function request(path: string) {
@@ -23,6 +30,7 @@ function signedOut() {
 }
 
 beforeEach(() => {
+  bypass.disabled = false;
   getClaims.mockReset();
   createServerClient.mockClear();
   vi.unstubAllEnvs();
@@ -161,4 +169,37 @@ test("로그에는 환경 값 자체를 남기지 않는다", async () => {
   const logged = log.mock.calls.flat().join(" ");
   expect(logged).not.toContain("SECRETVALUE");
   log.mockRestore();
+});
+
+test("로그인 우회가 켜져 있으면 로그인하지 않아도 화면과 API가 그대로 열린다", async () => {
+  bypass.disabled = true;
+  signedOut();
+
+  const page = await updateSession(request("/"));
+  const api = await updateSession(request("/api/chat"));
+
+  expect(page.status).toBe(200);
+  expect(page.headers.get("location")).toBeNull();
+  expect(api.status).toBe(200);
+  expect(createServerClient).not.toHaveBeenCalled();
+});
+
+test("로그인 우회가 켜져 있으면 Supabase 설정이 없는 운영 환경에서도 막지 않는다", async () => {
+  bypass.disabled = true;
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "");
+  vi.stubEnv("NODE_ENV", "production");
+
+  const response = await updateSession(request("/"));
+
+  expect(response.status).toBe(200);
+});
+
+test("로그인 우회가 켜져 있으면 로그인 화면 주소도 홈으로 보낸다", async () => {
+  bypass.disabled = true;
+
+  const response = await updateSession(request("/login"));
+
+  expect(response.status).toBe(307);
+  expect(new URL(response.headers.get("location")!).pathname).toBe("/");
 });

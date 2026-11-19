@@ -1,4 +1,4 @@
-import { isAuthConfigured, isProduction } from "./config";
+import { isAuthConfigured, isLoginDisabled, isProduction } from "./config";
 import { createServerSupabase } from "./supabase-server";
 
 /**
@@ -6,6 +6,7 @@ import { createServerSupabase } from "./supabase-server";
  * proxy와 별개로 한 번 더 확인해서, 요청 앞단 설정이 어긋나도 AI 호출이 열리지 않게 한다.
  */
 export async function requireUser(): Promise<Response | null> {
+  if (isLoginDisabled()) return null;
   if (!isAuthConfigured()) {
     return isProduction()
       ? Response.json({ error: "auth_not_configured" }, { status: 503 })

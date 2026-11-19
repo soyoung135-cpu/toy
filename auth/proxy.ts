@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isAuthConfigured, isProduction } from "./config";
+import { isAuthConfigured, isLoginDisabled, isProduction } from "./config";
 
 const LOGIN_PATH = "/login";
 const CACHE_HEADERS = ["cache-control", "expires", "pragma"];
@@ -22,6 +22,17 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 }
 
 async function handleRequest(request: NextRequest): Promise<NextResponse> {
+  if (isLoginDisabled()) {
+    // 임시로 로그인을 건너뛴다. 로그인 화면은 쓸 일이 없으니 홈으로 보낸다.
+    if (request.nextUrl.pathname === LOGIN_PATH) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next({ request });
+  }
+
   if (!isAuthConfigured()) {
     // 설정이 없으면 개발 환경은 로그인 없이 쓰고, 운영 환경은 모두 막는다.
     return isProduction()
