@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -58,6 +59,7 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
   const [status, setStatus] = useState<Status>("ready");
   const [error, setError] = useState<string | null>(null);
   const [corrections, setCorrections] = useState<Correction[] | null>(null);
+  const [draft, setDraft] = useState("");
 
   // 대화가 바뀌거나 끝난 뒤에 늦게 도착한 응답이 화면을 덮어쓰지 않게 한다.
   const runId = useRef(0);
@@ -80,6 +82,7 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
     setPersona(pickPersona(rand));
     setMessages([]);
     setCorrections(null);
+    setDraft("");
     setError(null);
     setStatus("ready");
     setPhase("persona");
@@ -129,22 +132,48 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
       }
       if (id !== runId.current) return;
 
-      if (isEndPhrase(heard)) {
-        await finish();
-        return;
-      }
+      await submitUtterance(persona, heard, id, "다시 말해 주세요.");
+    } finally {
+      speaking.current = false;
+    }
+  }
 
-      const withUser: Message[] = [...messages, { role: "user", content: heard }];
-      setMessages(withUser);
-      try {
-        await reply(persona, withUser, id);
-      } catch {
-        if (id !== runId.current) return;
-        // 답을 못 받은 내 말은 기록에서 빼서 턴이 어긋나지 않게 한다.
-        setMessages(messages);
-        setError("응답을 받지 못했습니다. 다시 말해 주세요.");
-        setStatus("ready");
-      }
+  // 말하든 쓰든 내 한 마디는 같은 길로 처리한다: 종료 문구면 끝내고, 아니면 페르소나의 답을 받는다.
+  async function submitUtterance(
+    current: Persona,
+    text: string,
+    id: number,
+    retryHint: string,
+    onReplyFailed?: () => void,
+  ) {
+    if (isEndPhrase(text)) {
+      await finish();
+      return;
+    }
+    const withUser: Message[] = [...messages, { role: "user", content: text }];
+    setMessages(withUser);
+    try {
+      await reply(current, withUser, id);
+    } catch {
+      if (id !== runId.current) return;
+      // 답을 못 받은 내 말은 기록에서 빼서 턴이 어긋나지 않게 한다.
+      setMessages(messages);
+      setError(`응답을 받지 못했습니다. ${retryHint}`);
+      setStatus("ready");
+      onReplyFailed?.();
+    }
+  }
+
+  async function sendText() {
+    const text = draft.trim();
+    if (!persona || status !== "ready" || speaking.current || text === "") return;
+    speaking.current = true;
+    try {
+      setDraft("");
+      setError(null);
+      await submitUtterance(persona, text, runId.current, "다시 보내 주세요.", () =>
+        setDraft(text),
+      );
     } finally {
       speaking.current = false;
     }
@@ -252,6 +281,29 @@ export function ConversationView({ speech, random }: ConversationViewProps) {
         <p className="text-sm text-muted-foreground" aria-live="polite">
           {STATUS_LABEL[status]}
         </p>
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void sendText();
+          }}
+        >
+          <Input
+            aria-label="영어 문장 입력"
+            placeholder="마이크 대신 영어로 입력하고 Enter"
+            autoComplete="off"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            disabled={status !== "ready"}
+          />
+          <Button
+            type="submit"
+            variant="secondary"
+            disabled={status !== "ready" || draft.trim() === ""}
+          >
+            보내기
+          </Button>
+        </form>
         <div className="flex gap-2">
           <Button size="lg" className="flex-1" onClick={speak} disabled={status !== "ready"}>
             말하기

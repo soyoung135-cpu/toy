@@ -8,7 +8,9 @@ type Json = Record<string, unknown>;
 
 let chatCalls: Json[];
 let feedbackCalls: Json[];
-let chatReplies: (string | "FAIL")[];
+let chatReplies: (string | "FAIL" | "HOLD")[];
+// "HOLD" 응답은 releaseHold()를 부를 때까지 붙잡아 둔다.
+let releaseHold: (() => void) | null;
 let corrections: { original: string; corrected: string; explanation: string }[];
 
 function stubApi() {
@@ -20,6 +22,12 @@ function stubApi() {
         chatCalls.push(body);
         const next = chatReplies.shift() ?? `reply ${chatCalls.length}`;
         if (next === "FAIL") return Response.json({ error: "x" }, { status: 502 });
+        if (next === "HOLD") {
+          await new Promise<void>((resolve) => {
+            releaseHold = resolve;
+          });
+          return Response.json({ reply: "held reply" });
+        }
         return Response.json({ reply: next });
       }
       if (url === "/api/feedback") {
@@ -75,6 +83,7 @@ async function say(user: ReturnType<typeof createUser>) {
 }
 
 beforeEach(() => {
+  releaseHold = null;
   chatCalls = [];
   feedbackCalls = [];
   chatReplies = [];
@@ -311,5 +320,137 @@ test("페르소나의 답을 받지 못하면 안내가 보이고 내 말은 기
 
   expect(await screen.findByText(/응답을 받지 못했습니다/)).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByText("I will fail")).not.toBeInTheDocument());
+  expect(screen.getByText("0/20")).toBeInTheDocument();
+});
+
+// ---- 글자 입력 (AC12) ----
+
+function textBox() {
+  return screen.getByLabelText("영어 문장 입력") as HTMLInputElement;
+}
+
+async function typeText(text: string) {
+  await act(async () => {
+    fireEvent.change(textBox(), { target: { value: text } });
+  });
+}
+
+async function submitForm() {
+  await act(async () => {
+    fireEvent.submit(textBox().closest("form")!);
+  });
+}
+
+test("입력창에 쓴 문장을 보내면 말한 것과 똑같이 처리되고 입력창이 비워지며 음성 인식은 시작되지 않는다", async () => {
+  chatReplies = ["Hello!", "Nice to meet you, Kim."];
+  const { user, speech } = setup();
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+  await screen.findByText("Hello!");
+  await waitFor(() => expect(textBox()).toBeEnabled());
+
+  await typeText("I have a reservation under Kim");
+  await submitForm();
+
+  expect(await screen.findByText("I have a reservation under Kim")).toBeInTheDocument();
+  expect(await screen.findByText("Nice to meet you, Kim.")).toBeInTheDocument();
+  expect(screen.getByText("1/20")).toBeInTheDocument();
+  expect(speech.speak).toHaveBeenLastCalledWith("Nice to meet you, Kim.");
+  expect(speech.listen).not.toHaveBeenCalled();
+  expect(textBox().value).toBe("");
+  expect(chatCalls[1].messages).toEqual([
+    { role: "assistant", content: "Hello!" },
+    { role: "user", content: "I have a reservation under Kim" },
+  ]);
+});
+
+test("보내기 버튼을 눌러도 보내진다", async () => {
+  const { user } = setup();
+  await startConversation(user);
+  await waitFor(() => expect(textBox()).toBeEnabled());
+
+  await typeText("I like it here");
+  await user.click(screen.getByRole("button", { name: "보내기" }));
+
+  expect(await screen.findByText("1/20")).toBeInTheDocument();
+  expect(screen.getByText("I like it here")).toBeInTheDocument();
+});
+
+test("공백뿐인 입력은 보내지지 않는다", async () => {
+  const { user } = setup();
+  await startConversation(user);
+  await waitFor(() => expect(textBox()).toBeEnabled());
+
+  await typeText("   ");
+  await submitForm();
+
+  expect(chatCalls).toHaveLength(1);
+  expect(screen.getByText("0/20")).toBeInTheDocument();
+});
+
+test("입력창에 종료 문구를 써서 보내면 교정 화면으로 간다", async () => {
+  const { user } = setup();
+  await startConversation(user);
+  await waitFor(() => expect(textBox()).toBeEnabled());
+
+  await typeText("I'm done");
+  await submitForm();
+
+  expect(await screen.findByRole("heading", { name: "교정" })).toBeInTheDocument();
+  expect(feedbackCalls).toHaveLength(1);
+  expect(chatCalls).toHaveLength(1);
+});
+
+test("페르소나의 답을 기다리는 동안에는 입력창과 보내기가 막힌다", async () => {
+  chatReplies = ["Hello!", "HOLD"];
+  const { user } = setup();
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+  await screen.findByText("Hello!");
+  await waitFor(() => expect(textBox()).toBeEnabled());
+
+  await typeText("Please wait for me");
+  await submitForm();
+
+  await waitFor(() => expect(textBox()).toBeDisabled());
+  expect(screen.getByRole("button", { name: "보내기" })).toBeDisabled();
+
+  await act(async () => {
+    releaseHold?.();
+  });
+  expect(await screen.findByText("held reply")).toBeInTheDocument();
+  await waitFor(() => expect(textBox()).toBeEnabled());
+});
+
+test("같은 순간에 두 번 보내도 한 번만 처리된다", async () => {
+  const { user } = setup();
+  await startConversation(user);
+  await waitFor(() => expect(textBox()).toBeEnabled());
+  await typeText("Only once please");
+  const form = textBox().closest("form")!;
+
+  await act(async () => {
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+
+  await screen.findByText("1/20");
+  expect(chatCalls).toHaveLength(2);
+  expect(screen.getAllByText("Only once please")).toHaveLength(1);
+});
+
+test("답을 받지 못하면 입력했던 문장이 입력창에 돌아온다", async () => {
+  chatReplies = ["Hello!", "FAIL"];
+  const { user } = setup();
+  await user.click(screen.getByRole("button", { name: "새 대화" }));
+  await user.click(screen.getByRole("button", { name: "대화 시작" }));
+  await screen.findByText("Hello!");
+  await waitFor(() => expect(textBox()).toBeEnabled());
+
+  await typeText("This will fail");
+  await submitForm();
+
+  expect(await screen.findByText(/응답을 받지 못했습니다/)).toBeInTheDocument();
+  await waitFor(() => expect(textBox().value).toBe("This will fail"));
   expect(screen.getByText("0/20")).toBeInTheDocument();
 });
