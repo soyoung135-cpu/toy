@@ -72,3 +72,5 @@ flowchart LR
 ```
 
 파이프라인 밖에서는 `project-knowledge`, `maintain-project-context`, `add-stack-context`, `build-prototype`, `explain-visually`, `tdd`, `llm-evals`가 각자의 조건에 따라 켜집니다. `project-knowledge`는 `GLOSSARY.md`, `docs/decisions/`, `docs/follow-ups/`에 다음 작업에서도 재사용할 지식과 후속 항목을 남깁니다. Git 작업은 `commit`, `pull`, `push`, `pr`, `merge`, `clean-branches`가 해당 요청에 맞춰 처리합니다.
+
+스킬별 역할과 설계 의도, 이 프로젝트의 검증·리뷰 예산은 [docs/skills-guide.md](docs/skills-guide.md)에 정리되어 있습니다.
